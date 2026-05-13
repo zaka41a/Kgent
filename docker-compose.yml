@@ -1,0 +1,41 @@
+services:
+  kgent:
+    build: .
+    image: kgent:latest
+    ports:
+      - "8088:8088"
+    environment:
+      KGENT_HOST: 0.0.0.0
+      KGENT_PORT: 8088
+      KGENT_STORE: ${KGENT_STORE:-json}
+      KGENT_STORE_PATH: /data/index.json
+      KGENT_DB_URL: postgresql+psycopg2://kgent:kgent@db:5432/kgent
+      KGENT_LOG_LEVEL: ${KGENT_LOG_LEVEL:-INFO}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    volumes:
+      - kgent_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kgent
+      POSTGRES_PASSWORD: kgent
+      POSTGRES_DB: kgent
+    volumes:
+      - kgent_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kgent -d kgent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  kgent_data:
+  kgent_db:

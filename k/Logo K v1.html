@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Logo K — Explorations</title>
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --ink: #14201a;
+    --muted: #6b7770;
+    --green-deep: oklch(0.42 0.12 155);
+    --green: oklch(0.58 0.16 150);
+    --green-bright: oklch(0.72 0.18 145);
+    --green-soft: oklch(0.88 0.06 150);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 64px 48px 96px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid #e2e0d8;
+    padding-bottom: 20px;
+    margin-bottom: 48px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  header .meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e6e4dc;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage {
+    aspect-ratio: 1 / 1;
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+  .label {
+    border-top: 1px solid #ececec;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .label b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- 01. Geometric monogram ---------- */
+  .v1 { background: var(--bg); }
+  .v1 svg { width: 60%; height: 60%; }
+
+  /* ---------- 02. Stencil cut ---------- */
+  .v2 { background: var(--green-deep); }
+
+  /* ---------- 03. Solid block ---------- */
+  .v3 { background: #fff; }
+
+  /* ---------- 04. Outline ---------- */
+  .v4 { background: var(--green-soft); }
+
+  /* ---------- 05. Stacked / arrow ---------- */
+  .v5 { background: #0e1a14; }
+
+  /* ---------- 06. Chip / lockup ---------- */
+  .v6 { background: var(--bg); flex-direction: column; gap: 16px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px 10px 10px;
+    background: #fff;
+    border: 1px solid #e2e0d8;
+    border-radius: 999px;
+  }
+  .chip .mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--green);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.04em;
+  }
+  .chip .word {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  footer {
+    margin-top: 48px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Logo K — explorations en vert</h1>
+      <span class="meta">6 directions · 1280×1280 export</span>
+    </header>
+
+    <div class="grid">
+
+      <!-- 01 — Geometric monogram: K from a square + two angled cuts -->
+      <div class="card">
+        <div class="stage v1">
+          <svg viewBox="0 0 200 200" aria-label="Logo K géométrique">
+            <!-- vertical bar -->
+            <rect x="40" y="30" width="34" height="140" fill="oklch(0.42 0.12 155)"/>
+            <!-- upper diagonal -->
+            <polygon points="74,100 150,30 170,30 94,100" fill="oklch(0.58 0.16 150)"/>
+            <!-- lower diagonal -->
+            <polygon points="74,100 94,100 170,170 150,170" fill="oklch(0.72 0.18 145)"/>
+          </svg>
+        </div>
+        <div class="label"><b>01 · Geometric</b><span>3-tone green</span></div>
+      </div>
+
+      <!-- 02 — Stencil cut on green field -->
+      <div class="card">
+        <div class="stage v2">
+          <svg viewBox="0 0 200 200" width="55%" height="55%" aria-label="Logo K stencil">
+            <defs>
+              <mask id="kmask">
+                <rect width="200" height="200" fill="white"/>
+                <!-- carve out K -->
+                <rect x="50" y="30" width="22" height="140" fill="black"/>
+                <polygon points="72,100 140,30 162,30 94,100" fill="black"/>
+                <polygon points="72,100 94,100 162,170 140,170" fill="black"/>
+              </mask>
+            </defs>
+            <rect width="200" height="200" fill="oklch(0.88 0.06 150)" mask="url(#kmask)"/>
+            <circle cx="100" cy="100" r="92" fill="none" stroke="oklch(0.72 0.18 145)" stroke-width="2" stroke-dasharray="2 6"/>
+          </svg>
+        </div>
+        <div class="label" style="background:#0d1a14;border-top-color:#1a2a22;color:#8aa094;"><b style="color:#e6efe8;">02 · Stencil</b><span>cut-through</span></div>
+      </div>
+
+      <!-- 03 — Bold solid block -->
+      <div class="card">
+        <div class="stage v3">
+          <svg viewBox="0 0 200 200" width="62%" height="62%" aria-label="Logo K solide">
+            <g fill="oklch(0.58 0.16 150)">
+              <rect x="36" y="28" width="38" height="144" rx="2"/>
+              <path d="M74 100 L150 28 L176 28 L100 100 L176 172 L150 172 L74 100 Z"/>
+            </g>
+          </svg>
+        </div>
+        <div class="label"><b>03 · Solid</b><span>single-fill</span></div>
+      </div>
+
+      <!-- 04 — Outline / wire -->
+      <div class="card">
+        <div class="stage v4">
+          <svg viewBox="0 0 200 200" width="62%" height="62%" aria-label="Logo K outline">
+            <g fill="none" stroke="oklch(0.42 0.12 155)" stroke-width="6" stroke-linejoin="miter">
+              <rect x="38" y="30" width="32" height="140"/>
+              <path d="M70 100 L150 30 L170 30 L92 100 L170 170 L150 170 L70 100 Z"/>
+            </g>
+          </svg>
+        </div>
+        <div class="label"><b>04 · Outline</b><span>wire frame</span></div>
+      </div>
+
+      <!-- 05 — Stacked chevrons forming K -->
+      <div class="card">
+        <div class="stage v5">
+          <svg viewBox="0 0 200 200" width="60%" height="60%" aria-label="Logo K chevrons">
+            <!-- vertical stem -->
+            <rect x="40" y="32" width="20" height="136" fill="oklch(0.72 0.18 145)"/>
+            <!-- chevrons stacked -->
+            <g fill="none" stroke="oklch(0.72 0.18 145)" stroke-width="20" stroke-linecap="square">
+              <polyline points="70,100 130,40 170,40" />
+              <polyline points="70,100 130,160 170,160" />
+            </g>
+          </svg>
+        </div>
+        <div class="label" style="background:#0d1a14;border-top-color:#1a2a22;color:#8aa094;"><b style="color:#e6efe8;">05 · Chevron</b><span>dark mode</span></div>
+      </div>
+
+      <!-- 06 — Chip / lockup variations -->
+      <div class="card">
+        <div class="stage v6">
+          <div class="chip">
+            <span class="mark">K</span>
+            <span class="word">kompass</span>
+          </div>
+          <div class="chip" style="background:var(--green-deep);border-color:transparent;">
+            <span class="mark" style="background:#fff;color:var(--green-deep);">K</span>
+            <span class="word" style="color:#fff;">kompass</span>
+          </div>
+        </div>
+        <div class="label"><b>06 · Lockup</b><span>chip variants</span></div>
+      </div>
+
+    </div>
+
+    <footer>
+      Note · Exemple de nom (« kompass ») à titre indicatif. Remplaçable par votre nom réel. Les verts utilisent oklch — ajustables sur une seule variable.
+    </footer>
+  </div>
+</body>
+</html>

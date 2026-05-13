@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
+from .ingest import Chunk
+
+
+class ChromaStore:
+    COLLECTION = "kgent_chunks"
+
+    def __init__(self, path: Path):
+        try:
+            import chromadb
+        except ImportError as e:
+            raise RuntimeError(
+                "chromadb is not installed. Run `pip install chromadb`."
+            ) from e
+
+        self._chromadb = chromadb
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.client = chromadb.PersistentClient(path=str(self.path.parent / "chroma_db"))
+        self.collection = self.client.get_or_create_collection(name=self.COLLECTION)
+        self._meta_path = self.path.parent / "meta.json"
+
+    def add(self, chunks: list[Chunk]) -> None:
+        if not chunks:
+            return
+        ids: list[str] = []
+        documents: list[str] = []
+        metadatas: list[dict] = []
+        for c in chunks:
+            ids.append(f"{c.doc_path}#{c.index}#{uuid.uuid4().hex[:6]}")
+            documents.append(c.text)
+            metadatas.append({"doc_path": c.doc_path, "kind": c.kind, "index": c.index})
+        self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+    def reset(self) -> None:
+        existing = {c.name for c in self.client.list_collections()}
+        if self.COLLECTION in existing:
+            self.client.delete_collection(self.COLLECTION)
+        self.collection = self.client.get_or_create_collection(name=self.COLLECTION)
+
+    def query(self, text: str, k: int = 5) -> list[Chunk]:
+        if self.collection.count() == 0:
+            return []
+        result = self.collection.query(query_texts=[text], n_results=k)
+        documents = result.get("documents", [[]])[0]
+        metadatas = result.get("metadatas", [[]])[0]
+        chunks: list[Chunk] = []
+        for text_i, meta in zip(documents, metadatas, strict=False):
+            chunks.append(
+                Chunk(
+                    doc_path=meta.get("doc_path", "?"),
+                    kind=meta.get("kind", "text"),
+                    index=int(meta.get("index", 0)),
+                    text=text_i,
+                )
+            )
+        return chunks
+
+    def count(self) -> int:
+        return self.collection.count()
+
+    def get_meta(self) -> dict:
+        if not self._meta_path.exists():
+            return {}
+        import json
+
+        try:
+            return json.loads(self._meta_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+    def set_meta(self, meta: dict) -> None:
+        import json
+
+        self._meta_path.parent.mkdir(parents=True, exist_ok=True)
+        self._meta_path.write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )

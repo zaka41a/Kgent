@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import click
+
+from .agent import answer, build_default_client
+from .ingest import ingest_path
+from .logging_config import configure_logging
+from .retriever import retrieve
+from .settings import get_settings
+from .store import get_store
+
+
+@click.group(help="kgent: a knowledge agent over project documentation.")
+def main() -> None:
+    configure_logging(get_settings().log_level)
+
+
+def _default_store_path() -> Path:
+    return get_settings().store_path
+
+
+@main.command("ingest", help="Ingest a directory and write its chunks to the store.")
+@click.argument("path", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+def ingest_cmd(path: Path, store_path: Path | None) -> None:
+    target = store_path or _default_store_path()
+    docs, chunks = ingest_path(path)
+    store = get_store("json", target)
+    store.add(chunks)
+    if hasattr(store, "set_meta"):
+        store.set_meta({
+            "repo_path": str(path.resolve()),
+            "document_count": len(docs),
+            "chunk_count": store.count(),
+        })
+    click.echo(f"Ingested {len(docs)} documents into {len(chunks)} chunks.")
+    click.echo(f"Total in store: {store.count()} (path: {target})")
+
+
+@main.command("query", help="Run a single retrieval query without calling an LLM.")
+@click.argument("question", nargs=-1, required=True)
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+@click.option("-k", default=5, show_default=True, help="Number of chunks to return.")
+def query_cmd(question: tuple[str, ...], store_path: Path | None, k: int) -> None:
+    target = store_path or _default_store_path()
+    text = " ".join(question)
+    store = get_store("json", target)
+    hits = retrieve(store, text, k=k)
+    if not hits:
+        click.echo("No matches.")
+        return
+    for c in hits:
+        click.echo(f"\n[{c.doc_path}#{c.index}]")
+        click.echo(c.text[:400])
+
+
+@main.command("chat", help="Interactive chat grounded in the ingested documentation.")
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+@click.option("-k", default=5, show_default=True)
+def chat_cmd(store_path: Path | None, k: int) -> None:
+    target = store_path or _default_store_path()
+    store = get_store("json", target)
+    if store.count() == 0:
+        click.echo("Store is empty. Run `kgent ingest <path>` first.")
+        return
+    client = build_default_client()
+    click.echo(f"Connected to {type(client).__name__}. Type a question, blank line to exit.")
+    while True:
+        try:
+            question = click.prompt(">", default="", show_default=False).strip()
+        except (EOFError, click.Abort):
+            click.echo()
+            break
+        if not question:
+            break
+        chunks = retrieve(store, question, k=k)
+        click.echo(answer(client, question, chunks))
+
+
+@main.command("serve", help="Run the web UI and REST API.")
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+@click.option("--host", default=None)
+@click.option("--port", default=None, type=int)
+def serve_cmd(store_path: Path | None, host: str | None, port: int | None) -> None:
+    from .server import serve
+
+    serve(host=host, port=port, store_path=store_path)
+
+
+if __name__ == "__main__":
+    main()

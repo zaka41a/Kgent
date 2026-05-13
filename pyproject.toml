@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kgent"
+version = "0.1.0"
+description = "A generic knowledge graph and chat agent over any project's documentation."
+authors = [{ name = "Zakaria Sabiri" }]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "click >=8.1",
+    "markdown-it-py >=3.0",
+    "rich >=13.0",
+    "httpx >=0.27",
+    "pydantic >=2.0",
+    "fastapi >=0.115",
+    "uvicorn >=0.32",
+    "sqlalchemy >=2.0",
+]
+
+[project.optional-dependencies]
+embed = [
+    "sentence-transformers >=2.2",
+    "chromadb >=0.4",
+]
+graph = [
+    "networkx >=3.0",
+]
+postgres = [
+    "psycopg2-binary >=2.9",
+]
+all = [
+    "kgent[embed,graph,postgres]",
+]
+test = [
+    "pytest >=8.0",
+    "pytest-cov >=5.0",
+    "ruff >=0.5",
+    "httpx >=0.27",
+]
+
+[project.scripts]
+kgent = "kgent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kgent*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-q"]
