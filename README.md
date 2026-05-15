@@ -3,6 +3,7 @@
   <h1><span style="color:#10a37f">k</span>gent</h1>
   <p><strong>A knowledge graph aware chat agent over any project's documentation.</strong></p>
   <p>
+    <a href="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml"><img src="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml/badge.svg" alt="ci" /></a>
     <a href="#install"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python" /></a>
     <a href="#license"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" /></a>
     <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="status" />
