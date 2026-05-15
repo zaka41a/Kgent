@@ -46,8 +46,8 @@ cd frontend && npm install && npm run build && cd ..
 
 Extras:
 
-* `[embed]` — adds `chromadb`, `sentence-transformers`, `torch` for vector search.
-* `[graph]` — adds `networkx` for the co occurrence graph.
+* `[embed]`: adds `chromadb`, `sentence-transformers`, `torch` for vector search.
+* `[graph]`: adds `networkx` for the co occurrence graph.
 * Plain `pip install -e .` works too, but keeps the default keyword-based JSON store.
 
 > Make sure your shell prompt shows `(.venv)` before installing. Installing outside the venv (e.g. from Anaconda's `(base)`) leaves `start.sh` unable to find the packages.
@@ -76,7 +76,7 @@ python -m pip install -e ".[embed,graph]"
 # 2. enable chroma in .env
 echo "KGENT_STORE=chroma" >> .env
 
-# 3. (re)start — .env is auto-loaded
+# 3. (re)start: .env is auto-loaded
 ./start.sh
 
 # 4. verify
@@ -96,7 +96,7 @@ This creates `.kgent_store/chroma_db/` containing:
 | `<uuid>/link_lists.bin` | HNSW graph for fast nearest-neighbor search |
 | `<uuid>/header.bin`, `length.bin` | HNSW index configuration |
 
-JSON and Chroma stores cohabit without conflict in `.kgent_store/` — switch back any time with `KGENT_STORE=json`.
+JSON and Chroma stores cohabit without conflict in `.kgent_store/`: switch back any time with `KGENT_STORE=json`.
 
 ## Docker
 
@@ -177,6 +177,23 @@ chat (multi turn,                  ▼
 ```
 
 ## Development
+
+A `Makefile` wraps the common commands:
+
+```bash
+make install      # create venv and install with [embed,graph] extras
+make dev          # add test/lint deps
+make test         # pytest
+make lint         # ruff check
+make format       # ruff format
+make build        # build the React frontend
+make serve        # foreground server
+make start/stop   # background server (start.sh / stop.sh)
+make clean        # purge caches and build artifacts
+make clean-store  # wipe the vector store (keeps chat.db)
+```
+
+Or run the raw commands:
 
 ```bash
 pip install -e ".[test]"
