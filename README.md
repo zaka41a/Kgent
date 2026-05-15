@@ -1,7 +1,7 @@
 <div align="center">
   <img src="kgent/web_assets/logo.svg" width="84" alt="kgent logo" />
   <h1><span style="color:#10a37f">k</span>gent</h1>
-  <p><strong>A knowledge graph aware chat agent over any project's documentation.</strong></p>
+  <p><strong>A knowledge graph aware RAG chat assistant over your codebases, documentation, emails, PDF and Word files.</strong></p>
   <p>
     <a href="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml"><img src="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml/badge.svg" alt="ci" /></a>
     <a href="#install"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python" /></a>
@@ -14,17 +14,20 @@
     <img src="https://img.shields.io/badge/Index-HNSW-7c3aed.svg" alt="HNSW" />
     <img src="https://img.shields.io/badge/LLMs-Ollama%20%7C%20OpenAI%20%7C%20Anthropic%20%7C%20Groq-f59e0b.svg" alt="Multi-LLM" />
     <img src="https://img.shields.io/badge/Streaming-SSE-ef4444.svg" alt="SSE" />
+    <img src="https://img.shields.io/badge/Sources-Code%20%7C%20Docs%20%7C%20PDF%20%7C%20Word%20%7C%20Email-8b5cf6.svg" alt="Sources" />
     <img src="https://img.shields.io/badge/Stack-FastAPI%20%2B%20React-06b6d4.svg" alt="Stack" />
   </p>
 </div>
 
 ## Overview
 
-Point kgent at any folder. It indexes the documents, builds a vector store and a co occurrence knowledge graph, and exposes a chat agent that grounds its answers in retrieval. Reusable across projects, model agnostic, runnable fully local.
+Point kgent at any folder. It extracts text from your files, indexes the chunks, builds a vector store and a co occurrence knowledge graph, and exposes a chat assistant that grounds its answers in retrieval. Reusable across projects, model agnostic, runnable fully local.
 
+* Many formats. Markdown, source code, plain text, PDF, Word, and Thunderbird email exports (.eml and .mbox) with attachment extraction.
 * Multi LLM. Ollama (local), OpenAI, Anthropic Claude, Groq.
 * Multi store. Keyword (default, zero config) or vector embeddings via Chroma.
 * GraphRAG. Vector top k combined with a graph hop on the co occurrence graph.
+* Robust ingestion. Runs in the background with live progress, respects .gitignore, and skips oversized or minified files.
 * Streaming. Server Sent Events stream responses token by token.
 * Persistent chat. SQLite by default, Postgres in production.
 * Web UI. React interface with provider switcher, settings modal, ingest flow.
@@ -40,7 +43,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 
 python -m pip install --upgrade pip
-python -m pip install -e ".[embed,graph]"   # full install: ChromaDB + graph
+python -m pip install -e ".[embed,graph,docs]"   # full install: ChromaDB, graph, document formats
 
 cd frontend && npm install && npm run build && cd ..
 ```
@@ -49,7 +52,8 @@ Extras:
 
 * `[embed]`: adds `chromadb`, `sentence-transformers`, `torch` for vector search.
 * `[graph]`: adds `networkx` for the co occurrence graph.
-* Plain `pip install -e .` works too, but keeps the default keyword-based JSON store.
+* `[docs]`: adds `pymupdf` and `python-docx` so kgent can read PDF and Word files.
+* Plain `pip install -e .` works too, but keeps the default keyword-based JSON store and reads only text files.
 
 > Make sure your shell prompt shows `(.venv)` before installing. Installing outside the venv (e.g. from Anaconda's `(base)`) leaves `start.sh` unable to find the packages.
 
@@ -72,7 +76,7 @@ By default kgent stores chunks in a JSON file and searches by keyword. To switch
 
 ```bash
 # 1. ensure the embed extra is installed
-python -m pip install -e ".[embed,graph]"
+python -m pip install -e ".[embed,graph,docs]"
 
 # 2. enable chroma in .env
 echo "KGENT_STORE=chroma" >> .env
@@ -145,7 +149,8 @@ kgent serve --port 8088        # run the HTTP API + UI
 GET    /api/health
 GET    /api/store/info
 GET    /api/providers
-POST   /api/ingest               { "path", "replace" }
+POST   /api/ingest               { "path", "replace" }, starts a background job, returns { "job_id" }
+GET    /api/ingest/status/{id}   ingestion progress for a running or finished job
 POST   /api/ask                  { "question", "k", "provider", "model", "history", "conversation_id" }
 POST   /api/ask/stream           same body, returns SSE
 GET    /api/conversations
@@ -210,6 +215,7 @@ cd frontend && npm run dev
 kgent/
 ├── kgent/
 │   ├── ingest.py         document discovery and chunking
+│   ├── extractors.py     PDF, Word, and email text extraction
 │   ├── store.py          JsonStore + provider selector
 │   ├── stores_chroma.py  Chroma vector store (opt in)
 │   ├── graph.py          co occurrence graph
