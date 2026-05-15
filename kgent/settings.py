@@ -6,6 +6,23 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+def _load_dotenv_once() -> None:
+    if load_dotenv is None:
+        return
+    for candidate in (Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"):
+        if candidate.exists():
+            load_dotenv(candidate, override=False)
+            break
+
+
+_load_dotenv_once()
+
 
 class Settings(BaseModel):
     host: str = Field(default_factory=lambda: os.getenv("KGENT_HOST", "127.0.0.1"))

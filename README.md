@@ -56,7 +56,6 @@ Extras:
 
 ```bash
 cp .env.example .env                # if not done yet
-set -a; source .env; set +a         # export env vars into your shell
 ./start.sh
 kgent ingest /path/to/your/repo
 ./stop.sh
@@ -64,7 +63,7 @@ kgent ingest /path/to/your/repo
 
 Open http://127.0.0.1:8088 to use the UI, or run `kgent chat` for the REPL.
 
-> `kgent/settings.py` reads `os.environ` directly and does not auto-load `.env`. The `set -a; source .env; set +a` line exports every variable from `.env` to the current shell, so `start.sh` picks them up.
+> `.env` is auto-loaded at startup via `python-dotenv`. Real environment variables still take precedence over `.env` values.
 
 ## Vector storage (ChromaDB)
 
@@ -77,8 +76,7 @@ python -m pip install -e ".[embed,graph]"
 # 2. enable chroma in .env
 echo "KGENT_STORE=chroma" >> .env
 
-# 3. reload env and (re)start
-set -a; source .env; set +a
+# 3. (re)start — .env is auto-loaded
 ./start.sh
 
 # 4. verify
