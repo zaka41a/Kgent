@@ -47,8 +47,10 @@ info "Starting kgent on http://$HOST:$PORT"
 nohup kgent serve --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
 echo $! >"$PID_FILE"
 
+READY_TIMEOUT_S="${KGENT_READY_TIMEOUT:-30}"
 ready=0
-for _ in $(seq 1 20); do
+iterations=$((READY_TIMEOUT_S * 2))
+for _ in $(seq 1 "$iterations"); do
   if curl -s -o /dev/null "http://$HOST:$PORT/api/store/info"; then
     ready=1
     break
@@ -56,13 +58,23 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 
+PID="$(cat "$PID_FILE" 2>/dev/null || echo "")"
+
 if [[ "$ready" == "1" ]]; then
-  info "Server is up. PID: $(cat "$PID_FILE")"
+  info "Server is up. PID: $PID"
   info "Open: http://$HOST:$PORT"
   info "Logs: $LOG_FILE"
 else
-  err "Server did not respond after 10s. Tail of log:"
-  tail -20 "$LOG_FILE" || true
-  rm -f "$PID_FILE"
-  exit 1
+  if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+    warn "Server did not respond after ${READY_TIMEOUT_S}s, but the process is still running (PID $PID)."
+    warn "First start can take longer (torch + embeddings). Watch the log:"
+    warn "  tail -f $LOG_FILE"
+    warn "Then try: curl http://$HOST:$PORT/api/store/info"
+    warn "Override the wait with: KGENT_READY_TIMEOUT=60 ./start.sh"
+  else
+    err "Server failed to start within ${READY_TIMEOUT_S}s. Tail of log:"
+    tail -20 "$LOG_FILE" || true
+    rm -f "$PID_FILE"
+    exit 1
+  fi
 fi
