@@ -1,6 +1,14 @@
 from pathlib import Path
 
-from kgent.ingest import Document, chunk, discover, ingest_path, load
+from kgent.ingest import (
+    MAX_FILE_BYTES,
+    Document,
+    chunk,
+    discover,
+    ingest_path,
+    load,
+    looks_minified,
+)
 
 
 def test_discover_filters_by_extension(tmp_path: Path):
@@ -63,3 +71,44 @@ def test_load_relative_path(tmp_path: Path):
     doc = load(file, root=tmp_path)
     assert doc.path == "sub/c.md"
     assert doc.kind == "markdown"
+
+
+def test_discover_skips_files_over_size_limit(tmp_path: Path):
+    big = tmp_path / "big.py"
+    big.write_text("x = 1\n" * 200_000, encoding="utf-8")
+    (tmp_path / "small.py").write_text("x = 1\n", encoding="utf-8")
+    assert big.stat().st_size > MAX_FILE_BYTES
+    found = sorted(p.name for p in discover(tmp_path))
+    assert found == ["small.py"]
+
+
+def test_discover_respects_gitignore(tmp_path: Path):
+    (tmp_path / ".gitignore").write_text("secret_dir\nscratch.md\n", encoding="utf-8")
+    (tmp_path / "secret_dir").mkdir()
+    (tmp_path / "secret_dir" / "x.md").write_text("# hidden", encoding="utf-8")
+    (tmp_path / "scratch.md").write_text("# scratch", encoding="utf-8")
+    (tmp_path / "keep.md").write_text("# keep", encoding="utf-8")
+    found = sorted(p.name for p in discover(tmp_path))
+    assert found == ["keep.md"]
+
+
+def test_looks_minified_detects_long_lines():
+    assert looks_minified("var a=1;" + "x" * 6000)
+    assert not looks_minified("short\nlines\nonly\n")
+
+
+def test_ingest_path_skips_minified_files(tmp_path: Path):
+    (tmp_path / "bundle.js").write_text("var a=1;" + "y" * 6000, encoding="utf-8")
+    (tmp_path / "clean.js").write_text("const a = 1;\n", encoding="utf-8")
+    docs, _ = ingest_path(tmp_path)
+    assert {d.path for d in docs} == {"clean.js"}
+
+
+def test_ingest_path_reports_progress(tmp_path: Path):
+    (tmp_path / "a.md").write_text("# a", encoding="utf-8")
+    (tmp_path / "b.md").write_text("# b", encoding="utf-8")
+    events: list[tuple[int, int, int, int]] = []
+    ingest_path(tmp_path, on_progress=lambda *args: events.append(args))
+    assert len(events) == 2
+    assert events[-1][0] == 2
+    assert events[-1][1] == 2

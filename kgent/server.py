@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+import uuid
 from dataclasses import asdict
 from pathlib import Path
 
@@ -155,12 +157,66 @@ class _State:
         self.store_kind = type(self.store).__name__
         self.graph: KGraph | None = None
         self.chats = ChatStore(db_url=settings.db_url)
+        self.ingest_jobs: dict[str, dict] = {}
         self._maybe_rebuild_graph()
 
     def _maybe_rebuild_graph(self) -> None:
         chunks = getattr(self.store, "_chunks", None)
         if chunks:
             self.graph = build_cooccurrence_graph(chunks, min_count=3)
+
+
+def _run_ingest_job(state: _State, job_id: str, target: Path, replace: bool) -> None:
+    """Run a repository ingestion in the background, updating the job record."""
+    job = state.ingest_jobs[job_id]
+    try:
+        job["state"] = "running"
+        job["phase"] = "scanning"
+
+        def on_read(processed: int, total: int, documents: int, chunks: int) -> None:
+            job["phase"] = "reading"
+            job["processed"] = processed
+            job["total"] = total
+            job["documents"] = documents
+            job["chunks"] = chunks
+
+        docs, chunks = ingest_path(target, on_progress=on_read)
+
+        if replace and hasattr(state.store, "reset"):
+            state.store.reset()
+
+        job["phase"] = "indexing"
+        job["index_total"] = len(chunks)
+
+        def on_index(indexed: int, total: int) -> None:
+            job["indexed"] = indexed
+            job["index_total"] = total
+
+        state.store.add(chunks, on_progress=on_index)
+
+        if hasattr(state.store, "set_meta"):
+            state.store.set_meta({
+                "repo_path": str(target),
+                "document_count": len(docs),
+                "chunk_count": state.store.count(),
+            })
+        if chunks:
+            state.graph = build_cooccurrence_graph(chunks, min_count=3)
+
+        job["documents"] = len(docs)
+        job["chunks"] = len(chunks)
+        job["total_chunks"] = state.store.count()
+        job["phase"] = "done"
+        job["state"] = "completed"
+        log.info(
+            "ingested %d documents (%d chunks) from %s",
+            len(docs), len(chunks), target,
+        )
+    except Exception as exc:
+        log.exception("ingest job %s failed for %s", job_id, target)
+        job["state"] = "failed"
+        job["phase"] = "error"
+        job["error"] = str(exc)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -212,7 +268,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         infos = list_providers(api_keys=api_keys)
         return {"providers": [asdict(p) for p in infos]}
 
-    @app.post("/api/ingest")
+    @app.post("/api/ingest", status_code=202)
     def ingest_endpoint(req: IngestRequest) -> dict:
         target = Path(req.path).expanduser().resolve()
         if not target.exists():
@@ -220,33 +276,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not target.is_dir():
             raise HTTPException(status_code=400, detail=f"Path is not a directory: {target}")
 
-        if req.replace and hasattr(state.store, "reset"):
-            state.store.reset()
-
-        try:
-            docs, chunks = ingest_path(target)
-        except Exception as exc:
-            log.exception("ingest failed for %s", target)
-            raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
-
-        state.store.add(chunks)
-        if hasattr(state.store, "set_meta"):
-            state.store.set_meta({
-                "repo_path": str(target),
-                "document_count": len(docs),
-                "chunk_count": state.store.count(),
-            })
-
-        if chunks:
-            state.graph = build_cooccurrence_graph(chunks, min_count=3)
-
-        log.info("ingested %d documents (%d chunks) from %s", len(docs), len(chunks), target)
-        return {
-            "documents": len(docs),
-            "chunks_added": len(chunks),
-            "total_chunks": state.store.count(),
+        job_id = uuid.uuid4().hex[:12]
+        state.ingest_jobs[job_id] = {
+            "job_id": job_id,
+            "state": "pending",
+            "phase": "queued",
+            "processed": 0,
+            "total": 0,
+            "documents": 0,
+            "chunks": 0,
+            "indexed": 0,
+            "index_total": 0,
+            "total_chunks": 0,
+            "error": None,
             "repo_path": str(target),
         }
+        thread = threading.Thread(
+            target=_run_ingest_job,
+            args=(state, job_id, target, req.replace),
+            daemon=True,
+        )
+        thread.start()
+        return {"job_id": job_id, "state": "pending"}
+
+    @app.get("/api/ingest/status/{job_id}")
+    def ingest_status(job_id: str) -> dict:
+        job = state.ingest_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Unknown ingest job: {job_id}")
+        return job
 
     @app.post("/api/ask")
     def ask_endpoint(

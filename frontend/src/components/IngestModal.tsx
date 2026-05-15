@@ -15,10 +15,46 @@ export interface IngestResult {
   repo_path: string;
 }
 
+interface IngestJob {
+  state: string;
+  phase: string;
+  processed: number;
+  total: number;
+  documents: number;
+  chunks: number;
+  indexed: number;
+  index_total: number;
+  total_chunks: number;
+  error: string | null;
+  repo_path: string;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const PHASE_LABELS: Record<string, string> = {
+  queued: "Queued",
+  scanning: "Scanning files",
+  reading: "Reading documents",
+  indexing: "Building the index",
+  done: "Done",
+  error: "Failed",
+};
+
+function jobPercent(job: IngestJob): number {
+  if (job.phase === "reading" && job.total > 0) {
+    return Math.round((job.processed / job.total) * 100);
+  }
+  if (job.phase === "indexing" && job.index_total > 0) {
+    return Math.round((job.indexed / job.index_total) * 100);
+  }
+  return job.phase === "done" ? 100 : 0;
+}
+
 export default function IngestModal({ open, onClose, onIngested, onError }: Props) {
   const [path, setPath] = useState("");
   const [replace, setReplace] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<IngestJob | null>(null);
 
   if (!open) return null;
 
@@ -26,6 +62,7 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
     const trimmed = path.trim();
     if (!trimmed || busy) return;
     setBusy(true);
+    setJob(null);
     try {
       const res = await fetch("/api/ingest", {
         method: "POST",
@@ -43,16 +80,48 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
         onError(detail);
         return;
       }
-      const data = (await res.json()) as IngestResult;
-      onIngested(data);
-      setPath("");
-      onClose();
+      const { job_id } = (await res.json()) as { job_id: string };
+
+      // The server runs the ingestion in the background. Poll its status
+      // until the job reports that it completed or failed.
+      let finished = false;
+      while (!finished) {
+        await sleep(600);
+        const statusRes = await fetch(`/api/ingest/status/${job_id}`);
+        if (!statusRes.ok) {
+          onError("Lost track of the ingestion job.");
+          return;
+        }
+        const current = (await statusRes.json()) as IngestJob;
+        setJob(current);
+        if (current.state === "completed") {
+          onIngested({
+            documents: current.documents,
+            chunks_added: current.chunks,
+            total_chunks: current.total_chunks,
+            repo_path: current.repo_path,
+          });
+          setPath("");
+          onClose();
+          finished = true;
+        } else if (current.state === "failed") {
+          onError(current.error || "Ingestion failed.");
+          finished = true;
+        }
+      }
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setJob(null);
     }
   };
+
+  const buttonLabel = busy
+    ? job
+      ? PHASE_LABELS[job.phase] ?? "Ingesting..."
+      : "Ingesting..."
+    : "Ingest";
 
   return (
     <div
@@ -97,7 +166,8 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
               autoFocus
               autoComplete="off"
               spellCheck={false}
-              className="w-full bg-bg-soft border border-border rounded-md px-3 py-2 text-sm font-mono outline-none focus:border-ink-dim transition-colors"
+              disabled={busy}
+              className="w-full bg-bg-soft border border-border rounded-md px-3 py-2 text-sm font-mono outline-none focus:border-ink-dim transition-colors disabled:opacity-50"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </div>
@@ -107,10 +177,29 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
               type="checkbox"
               checked={replace}
               onChange={(e) => setReplace(e.target.checked)}
+              disabled={busy}
               className="accent-accent"
             />
             <span>Replace the current index</span>
           </label>
+
+          {busy && job && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-ink-muted">
+                <span>{PHASE_LABELS[job.phase] ?? job.phase}</span>
+                <span>{jobPercent(job)}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-bg-soft rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{ width: `${jobPercent(job)}%` }}
+                />
+              </div>
+              <p className="text-xs text-ink-dim">
+                {job.documents} documents, {job.chunks} chunks
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
@@ -127,7 +216,7 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
             className="px-4 py-1.5 text-sm bg-accent text-white rounded-md hover:bg-accent-hover transition-colors disabled:opacity-40 flex items-center gap-2"
           >
             {busy && <Loader2 size={14} className="animate-spin" />}
-            {busy ? "Ingesting..." : "Ingest"}
+            {buttonLabel}
           </button>
         </div>
       </div>

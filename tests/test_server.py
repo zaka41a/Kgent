@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,16 @@ from fastapi.testclient import TestClient
 
 from kgent.server import create_app
 from kgent.settings import Settings
+
+
+def _wait_for_ingest(client: TestClient, job_id: str, timeout: float = 10.0) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        status = client.get(f"/api/ingest/status/{job_id}").json()
+        if status["state"] in ("completed", "failed"):
+            return status
+        time.sleep(0.05)
+    raise AssertionError(f"ingest job {job_id} did not finish in time")
 
 
 @pytest.fixture
@@ -45,13 +56,21 @@ def test_ingest_invalid_path(app_client: TestClient, tmp_path: Path):
     assert resp.status_code == 400
 
 
+def test_ingest_status_unknown_job(app_client: TestClient):
+    resp = app_client.get("/api/ingest/status/does-not-exist")
+    assert resp.status_code == 404
+
+
 def test_ingest_then_info_and_conversation(app_client: TestClient, tmp_path: Path):
     repo = _seed_repo(tmp_path)
     resp = app_client.post("/api/ingest", json={"path": str(repo), "replace": True})
-    assert resp.status_code == 200
-    payload = resp.json()
-    assert payload["documents"] == 2
-    assert payload["chunks_added"] >= 2
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+
+    status = _wait_for_ingest(app_client, job_id)
+    assert status["state"] == "completed", status
+    assert status["documents"] == 2
+    assert status["chunks"] >= 2
 
     info = app_client.get("/api/store/info").json()
     assert info["count"] >= 2

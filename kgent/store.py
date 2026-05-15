@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol
@@ -10,7 +11,11 @@ from .ingest import Chunk
 
 
 class VectorStore(Protocol):
-    def add(self, chunks: list[Chunk]) -> None: ...
+    def add(
+        self,
+        chunks: list[Chunk],
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> None: ...
     def query(self, text: str, k: int = 5) -> list[Chunk]: ...
     def count(self) -> int: ...
 
@@ -25,9 +30,15 @@ class JsonStore:
             self._chunks = [Chunk(**row) for row in data]
         self._meta_path = self.path.parent / "meta.json"
 
-    def add(self, chunks: list[Chunk]) -> None:
+    def add(
+        self,
+        chunks: list[Chunk],
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> None:
         self._chunks.extend(chunks)
         self._persist()
+        if on_progress is not None and chunks:
+            on_progress(len(chunks), len(chunks))
 
     def reset(self) -> None:
         self._chunks = []

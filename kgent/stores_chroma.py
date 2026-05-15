@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 from .ingest import Chunk
+
+# Chunks are sent to Chroma in slices of this size so a large repository does
+# not embed everything in one call and spike memory and CPU.
+ADD_BATCH_SIZE = 256
 
 
 class ChromaStore:
@@ -25,17 +30,26 @@ class ChromaStore:
         self.collection = self.client.get_or_create_collection(name=self.COLLECTION)
         self._meta_path = self.path.parent / "meta.json"
 
-    def add(self, chunks: list[Chunk]) -> None:
+    def add(
+        self,
+        chunks: list[Chunk],
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> None:
         if not chunks:
             return
-        ids: list[str] = []
-        documents: list[str] = []
-        metadatas: list[dict] = []
-        for c in chunks:
-            ids.append(f"{c.doc_path}#{c.index}#{uuid.uuid4().hex[:6]}")
-            documents.append(c.text)
-            metadatas.append({"doc_path": c.doc_path, "kind": c.kind, "index": c.index})
-        self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        total = len(chunks)
+        for start in range(0, total, ADD_BATCH_SIZE):
+            batch = chunks[start:start + ADD_BATCH_SIZE]
+            ids: list[str] = []
+            documents: list[str] = []
+            metadatas: list[dict] = []
+            for c in batch:
+                ids.append(f"{c.doc_path}#{c.index}#{uuid.uuid4().hex[:6]}")
+                documents.append(c.text)
+                metadatas.append({"doc_path": c.doc_path, "kind": c.kind, "index": c.index})
+            self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+            if on_progress is not None:
+                on_progress(min(start + ADD_BATCH_SIZE, total), total)
 
     def reset(self) -> None:
         existing = {c.name for c in self.client.list_collections()}
