@@ -150,8 +150,9 @@ export default function IngestModal({ open, onClose, onIngested, onError }: Prop
         <div className="px-5 py-4 space-y-4">
           <p className="text-xs text-ink-dim">
             Provide an absolute path to any directory containing documentation,
-            source code, or notes. <span className="text-accent">k</span>gent will extract supported files (md, rst,
-            py, ts, java, go, yaml, etc.), chunk them, and index them.
+            source code, or notes. <span className="text-accent">k</span>gent will extract supported files
+            (Markdown, source code, PDF, Word, and Thunderbird email exports),
+            chunk them, and index them.
           </p>
 
           <div>

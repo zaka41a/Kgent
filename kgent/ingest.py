@@ -4,7 +4,13 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-SUPPORTED_EXTENSIONS = {
+from . import extractors
+from .logging_config import get_logger
+
+log = get_logger(__name__)
+
+# Plain text formats: read directly, subject to the size and minified guards.
+TEXT_EXTENSIONS = {
     ".md": "markdown",
     ".markdown": "markdown",
     ".rst": "rst",
@@ -18,6 +24,17 @@ SUPPORTED_EXTENSIONS = {
     ".yaml": "yaml",
     ".yml": "yaml",
 }
+
+# Binary document formats: extracted through kgent.extractors.
+DOC_EXTENSIONS = {
+    ".pdf": "pdf",
+    ".docx": "docx",
+    ".eml": "email",
+    ".mbox": "email",
+}
+
+SUPPORTED_EXTENSIONS = {**TEXT_EXTENSIONS, **DOC_EXTENSIONS}
+_TEXT_KINDS = set(TEXT_EXTENSIONS.values())
 
 
 @dataclass(frozen=True)
@@ -55,9 +72,13 @@ _NOISE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "dist", "build",
                "out", "coverage", ".cache", ".parcel-cache"}
 
 
-# Files larger than this are skipped: likely data dumps, bundles, or minified
-# assets that would explode into thousands of low value chunks.
+# Text files larger than this are skipped: likely data dumps, bundles, or
+# minified assets that would explode into thousands of low value chunks.
 MAX_FILE_BYTES = 1_000_000
+
+# Binary documents (PDF, Word, mbox) may be much larger; a mailbox export in
+# particular is routinely tens of megabytes.
+MAX_DOC_BYTES = 200_000_000
 
 # A single line longer than this strongly suggests a minified or generated file.
 _MINIFIED_LINE_LEN = 5000
@@ -123,11 +144,13 @@ def discover(root: Path, ignore: Iterable[str] = ()) -> Iterator[Path]:
         for name in filenames:
             if name.lower() in _NOISE_FILENAMES or _ignored(name):
                 continue
-            if Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+            suffix = Path(name).suffix.lower()
+            if suffix not in SUPPORTED_EXTENSIONS:
                 continue
             path = Path(dirpath) / name
+            limit = MAX_FILE_BYTES if suffix in TEXT_EXTENSIONS else MAX_DOC_BYTES
             try:
-                if path.stat().st_size > MAX_FILE_BYTES:
+                if path.stat().st_size > limit:
                     continue
             except OSError:
                 continue
@@ -135,10 +158,11 @@ def discover(root: Path, ignore: Iterable[str] = ()) -> Iterator[Path]:
 
 
 def load(path: Path, root: Path | None = None) -> Document:
+    """Load a plain text file into a Document."""
     rel = str(path.relative_to(root)) if root else str(path)
     return Document(
         path=rel,
-        kind=SUPPORTED_EXTENSIONS[path.suffix.lower()],
+        kind=TEXT_EXTENSIONS[path.suffix.lower()],
         text=path.read_text(encoding="utf-8", errors="replace"),
     )
 
@@ -203,6 +227,56 @@ def _split_markdown_by_headings(text: str) -> list[str]:
     return sections or [text]
 
 
+def extract_documents(path: Path, root: Path | None = None) -> list[Document]:
+    """Load one file into one or more Documents, dispatching on file type.
+
+    A text, PDF, or Word file yields a single Document. An email yields its
+    body plus one Document per readable attachment, and an mbox export yields
+    that for every message it contains.
+    """
+    suffix = path.suffix.lower()
+    rel = str(path.relative_to(root)) if root else str(path)
+
+    if suffix in TEXT_EXTENSIONS:
+        return [load(path, root=root)]
+
+    if suffix == ".pdf":
+        text = extractors.extract_pdf(path.read_bytes())
+        return [Document(path=rel, kind="pdf", text=text)] if text else []
+
+    if suffix == ".docx":
+        text = extractors.extract_docx(path.read_bytes())
+        return [Document(path=rel, kind="docx", text=text)] if text else []
+
+    if suffix == ".eml":
+        return _email_documents(extractors.parse_email(path.read_bytes()), rel)
+
+    if suffix == ".mbox":
+        docs: list[Document] = []
+        for i, content in enumerate(extractors.iter_mbox(path)):
+            docs.extend(_email_documents(content, f"{rel}#mail{i}"))
+        return docs
+
+    return []
+
+
+def _email_documents(content: extractors.EmailContent, base_path: str) -> list[Document]:
+    docs: list[Document] = []
+    if content.text:
+        docs.append(Document(path=base_path, kind="email", text=content.text))
+    for name, data in content.attachments:
+        try:
+            extracted = extractors.extract_attachment(name, data)
+        except Exception:
+            log.warning("could not read attachment %s in %s", name, base_path)
+            continue
+        if extracted:
+            docs.append(
+                Document(path=f"{base_path}::{name}", kind="attachment", text=extracted)
+            )
+    return docs
+
+
 # Called once per file scanned, with (processed, total, documents, chunks).
 ProgressFn = Callable[[int, int, int, int], None]
 
@@ -215,8 +289,14 @@ def ingest_path(
     paths = list(discover(root))
     total = len(paths)
     for i, path in enumerate(paths, start=1):
-        doc = load(path, root=root)
-        if not looks_minified(doc.text):
+        try:
+            extracted = extract_documents(path, root=root)
+        except Exception:
+            log.warning("could not read %s, skipping", path, exc_info=True)
+            extracted = []
+        for doc in extracted:
+            if doc.kind in _TEXT_KINDS and looks_minified(doc.text):
+                continue
             docs.append(doc)
             chunks.extend(chunk(doc))
         if on_progress is not None:
