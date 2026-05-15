@@ -154,17 +154,26 @@ export async function ask(params: AskParams): Promise<AskResponse> {
     body: JSON.stringify(params),
   });
   if (!res.ok) {
-    const text = await res.text();
-    let detail = text;
-    try {
-      const parsed = JSON.parse(text);
-      detail = parsed.detail || text;
-    } catch {
-      /* keep raw text */
-    }
-    throw new Error(detail || `HTTP ${res.status}`);
+    throw new Error(await formatErrorBody(res));
   }
   return res.json();
+}
+
+async function formatErrorBody(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  if (!text) return `HTTP ${res.status}`;
+  try {
+    const parsed = JSON.parse(text);
+    const detail = parsed.detail;
+    if (detail && typeof detail === "object") {
+      const provider = detail.provider ? ` [${detail.provider}` + (detail.model ? `/${detail.model}` : "") + "]" : "";
+      const hint = detail.hint ? `\n${detail.hint}` : "";
+      return `${detail.error || "Request failed"}${provider}${hint}`;
+    }
+    return detail || text;
+  } catch {
+    return text || `HTTP ${res.status}`;
+  }
 }
 
 export interface StreamHandlers {
@@ -181,8 +190,7 @@ export async function askStream(params: AskParams, handlers: StreamHandlers): Pr
     body: JSON.stringify(params),
   });
   if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => "");
-    handlers.onError(text || `HTTP ${res.status}`);
+    handlers.onError(await formatErrorBody(res));
     handlers.onDone();
     return;
   }
@@ -208,7 +216,10 @@ export async function askStream(params: AskParams, handlers: StreamHandlers): Pr
         } else if (data.type === "delta") {
           handlers.onDelta(data.content);
         } else if (data.type === "error") {
-          handlers.onError(data.message);
+          const provider = data.provider ? ` [${data.provider}` + (data.model ? `/${data.model}` : "") + "]" : "";
+          const hint = data.hint ? `\n${data.hint}` : "";
+          const msg = `${data.error || data.message || "Stream failed"}${provider}${hint}`;
+          handlers.onError(msg);
         } else if (data.type === "done") {
           handlers.onDone();
           return;

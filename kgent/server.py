@@ -78,6 +78,60 @@ def _resolve_client(req: AskRequest, api_keys: dict[str, str]):
     return build_default_client()
 
 
+def _llm_error_payload(exc: Exception, provider: str, model: str) -> dict:
+    """Map a raw LLM exception to a structured, actionable error payload."""
+    import httpx
+
+    msg = str(exc)
+    lower = msg.lower()
+    error_type = "unknown"
+    hint = "Check the server logs for the full traceback."
+
+    if isinstance(exc, httpx.ConnectError) or "connection refused" in lower or "connection error" in lower:
+        error_type = "connection"
+        if provider == "ollama":
+            hint = (
+                "The Ollama daemon is not reachable. Start it with `ollama serve` and "
+                "verify `OLLAMA_BASE_URL` (default: http://localhost:11434)."
+            )
+        else:
+            hint = f"Could not reach the {provider} API. Check your internet connection and any proxy."
+    elif isinstance(exc, httpx.TimeoutException) or "timeout" in lower:
+        error_type = "timeout"
+        hint = f"The {provider} API timed out. Try again, or pick a smaller/faster model than {model!r}."
+    elif isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code if exc.response is not None else 0
+        if status == 401 or status == 403:
+            error_type = "auth"
+            hint = f"Authentication failed for {provider}. Open Settings and re-enter your API key."
+        elif status == 404:
+            error_type = "model_not_found"
+            if provider == "ollama":
+                hint = f"Model {model!r} is not pulled locally. Run `ollama pull {model}` and retry."
+            else:
+                hint = f"Model {model!r} does not exist on {provider}. Pick another in the model selector."
+        elif status == 429:
+            error_type = "rate_limit"
+            hint = f"{provider} rate limit hit. Wait a few seconds and try again."
+        elif 500 <= status < 600:
+            error_type = "upstream"
+            hint = f"{provider} is having a problem (HTTP {status}). Retry in a moment."
+        else:
+            error_type = "http"
+            hint = f"{provider} returned HTTP {status}."
+    elif "api key" in lower or "unauthorized" in lower:
+        error_type = "auth"
+        hint = f"Missing or invalid API key for {provider}. Open Settings and set the key."
+
+    return {
+        "error": msg,
+        "error_type": error_type,
+        "provider": provider,
+        "model": model,
+        "hint": hint,
+    }
+
+
 def _augment_question_with_history(question: str, history: list[dict], window: int = 6) -> str:
     if not history:
         return question
@@ -217,7 +271,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             text = answer(client, question, chunks)
         except Exception as exc:
             log.exception("LLM backend error (provider=%s model=%s)", client.name, client.model)
-            raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
+            payload = _llm_error_payload(exc, client.name, client.model)
+            raise HTTPException(status_code=502, detail=payload) from exc
         elapsed_ms = int((time.perf_counter() - started) * 1000)
 
         if req.conversation_id:
@@ -277,7 +332,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     yield _sse({"type": "delta", "content": token})
             except Exception as exc:
                 log.exception("stream error (provider=%s)", client.name)
-                yield _sse({"type": "error", "message": str(exc)})
+                payload = _llm_error_payload(exc, client.name, client.model)
+                yield _sse({"type": "error", **payload})
                 yield _sse({"type": "done"})
                 return
             elapsed_ms = int((time.perf_counter() - started) * 1000)
