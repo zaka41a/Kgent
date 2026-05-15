@@ -50,7 +50,9 @@ _NOISE_FILENAMES = {
 _NOISE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "dist", "build",
                ".kgent_store", ".github", "LICENSES", "licenses", ".idea",
                ".vscode", "site-packages", "egg-info", "chroma_db", ".tox",
-               ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+               ".mypy_cache", ".pytest_cache", ".ruff_cache",
+               ".next", ".vercel", ".turbo", ".nuxt", ".svelte-kit",
+               "out", "coverage", ".cache", ".parcel-cache"}
 
 
 def discover(root: Path, ignore: Iterable[str] = ()) -> Iterator[Path]:
