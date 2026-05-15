@@ -38,11 +38,8 @@ export default function Sidebar({
   return (
     <aside className="hidden md:flex md:w-72 flex-col bg-bg-soft border-r border-border">
       <div className="p-3 border-b border-border space-y-2">
-        <div className="flex items-center gap-2 px-1 pb-2">
-          <img src="/logo.svg" alt="kgent" className="w-7 h-7" />
-          <span className="font-semibold text-ink">
-            <span className="text-accent">k</span>gent
-          </span>
+        <div className="flex items-center px-2 pt-1 pb-2">
+          <img src="/logo.svg" alt="kgent" className="h-14" />
         </div>
         <button
           onClick={onNewChat}
