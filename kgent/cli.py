@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from .agent import answer, build_default_client
+from .eval import evaluate, load_cases
 from .ingest import ingest_path
 from .logging_config import configure_logging
 from .retriever import retrieve
@@ -77,6 +78,38 @@ def chat_cmd(store_path: Path | None, k: int) -> None:
             break
         chunks = retrieve(store, question, k=k)
         click.echo(answer(client, question, chunks))
+
+
+@main.command("eval", help="Measure retrieval quality against a labelled JSONL dataset.")
+@click.argument("dataset", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+@click.option("-k", default=5, show_default=True, help="Chunks retrieved per question.")
+@click.option("--verbose", is_flag=True, help="Show per-question results.")
+def eval_cmd(dataset: Path, store_path: Path | None, k: int, verbose: bool) -> None:
+    target = store_path or _default_store_path()
+    store = get_store("json", target)
+    if store.count() == 0:
+        raise click.ClickException("Store is empty. Run `kgent ingest <path>` first.")
+
+    cases = load_cases(dataset)
+    if not cases:
+        raise click.ClickException(f"No cases found in {dataset}.")
+
+    report = evaluate(store, cases, k=k)
+
+    if verbose:
+        for c in report.cases:
+            mark = "OK  " if c.hit else "MISS"
+            click.echo(
+                f"[{mark}] rr={c.reciprocal_rank:.2f} recall={c.recall:.2f}  {c.question}"
+            )
+        click.echo("")
+
+    click.echo(f"Cases:         {report.n}")
+    click.echo(f"hit@{k}:         {report.hit_rate:.1%}")
+    click.echo(f"MRR:           {report.mrr:.3f}")
+    click.echo(f"recall@{k}:      {report.recall:.1%}")
+    click.echo(f"precision@{k}:   {report.precision:.1%}")
 
 
 @main.command("serve", help="Run the web UI and REST API.")

@@ -1,0 +1,17 @@
+# Retrieval evaluation dataset (JSONL).
+# One case per line. Lines that are empty or start with '#' are ignored.
+#
+# Each case:
+#   "question": the query sent to the retriever
+#   "relevant": substrings expected in the doc_path of a retrieved chunk
+#
+# The cases below assume the kgent repository itself has been ingested:
+#   kgent ingest .
+#   kgent eval examples/eval.jsonl --verbose
+# Replace them with cases for your own corpus.
+{"question": "How is the co-occurrence graph built from chunks?", "relevant": ["graph.py"]}
+{"question": "Which file formats can be ingested?", "relevant": ["ingest.py", "README.md"]}
+{"question": "How does retrieval combine vector search with a graph hop?", "relevant": ["retriever.py"]}
+{"question": "Which LLM providers are supported?", "relevant": ["agent.py", "README.md"]}
+{"question": "How are chat conversations persisted?", "relevant": ["chat_store.py"]}
+{"question": "What REST endpoints does the server expose?", "relevant": ["server.py"]}

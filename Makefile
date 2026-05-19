@@ -18,6 +18,7 @@ help:
 	@echo "  make stop         Stop the background server"
 	@echo "  make clean        Remove caches and build artifacts"
 	@echo "  make clean-store  Wipe the vector store (.kgent_store/index.json, chroma_db)"
+	@echo "  make eval         Measure retrieval quality (examples/eval.jsonl)"
 
 $(VENV):
 	python3.12 -m venv $(VENV)
@@ -58,3 +59,6 @@ clean:
 clean-store:
 	rm -rf .kgent_store/index.json .kgent_store/meta.json .kgent_store/chroma_db
 	@echo "Vector store cleared. chat.db (history) and logs kept."
+
+eval:
+	$(PY) -m kgent.cli eval examples/eval.jsonl --verbose
