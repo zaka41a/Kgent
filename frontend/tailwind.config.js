@@ -6,20 +6,20 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0d0d0d",
-          soft: "#171717",
-          card: "#1f1f1f",
+          DEFAULT: "rgb(var(--bg) / <alpha-value>)",
+          soft: "rgb(var(--bg-soft) / <alpha-value>)",
+          card: "rgb(var(--bg-card) / <alpha-value>)",
         },
         ink: {
-          DEFAULT: "#ececec",
-          muted: "#a1a1a1",
-          dim: "#666",
+          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
+          muted: "rgb(var(--ink-muted) / <alpha-value>)",
+          dim: "rgb(var(--ink-dim) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "#10a37f",
-          hover: "#0e8c6c",
+          DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+          hover: "rgb(var(--accent-hover) / <alpha-value>)",
         },
-        border: "#2a2a2a",
+        border: "rgb(var(--border) / <alpha-value>)",
       },
       fontFamily: {
         sans: ['"Söhne"', '"Helvetica Neue"', "Helvetica", "Arial", "sans-serif"],

@@ -2,16 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens (RGB channels so Tailwind alpha modifiers keep working) */
+:root {
+  --bg: 13 13 13;
+  --bg-soft: 23 23 23;
+  --bg-card: 31 31 31;
+  --ink: 236 236 236;
+  --ink-muted: 161 161 161;
+  --ink-dim: 102 102 102;
+  --accent: 16 163 127;
+  --accent-hover: 14 140 108;
+  --border: 42 42 42;
+  --code-bg: 42 42 42;
+}
+
+html.light {
+  --bg: 255 255 255;
+  --bg-soft: 247 247 248;
+  --bg-card: 241 241 242;
+  --ink: 24 24 27;
+  --ink-muted: 90 90 95;
+  --ink-dim: 140 140 145;
+  --accent: 16 163 127;
+  --accent-hover: 13 138 107;
+  --border: 224 224 228;
+  --code-bg: 236 236 238;
+}
+
 html, body, #root {
   height: 100%;
 }
 
 body {
-  background-color: #0d0d0d;
-  color: #ececec;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--ink));
   font-family: "Söhne", "Helvetica Neue", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Markdown content */
@@ -27,12 +55,13 @@ body {
 .prose-chat ul, .prose-chat ol { padding-left: 1.4em; margin: 0.5em 0; }
 .prose-chat li { margin: 0.2em 0; }
 .prose-chat code {
-  background: #2a2a2a;
+  background: rgb(var(--code-bg));
   padding: 1px 5px;
   border-radius: 4px;
   font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
   font-size: 0.9em;
 }
+/* Code blocks stay dark in both themes to match the highlight.js theme */
 .prose-chat pre {
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
@@ -45,15 +74,16 @@ body {
   background: transparent;
   padding: 0;
   font-size: 0.875em;
+  color: #ececec;
 }
 .prose-chat blockquote {
-  border-left: 3px solid #10a37f;
+  border-left: 3px solid rgb(var(--accent));
   padding-left: 12px;
-  color: #a1a1a1;
+  color: rgb(var(--ink-muted));
   margin: 0.8em 0;
 }
 .prose-chat a {
-  color: #10a37f;
+  color: rgb(var(--accent));
   text-decoration: underline;
 }
 
@@ -66,11 +96,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: rgb(var(--border));
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
+  background: rgb(var(--ink-dim));
 }
 
 textarea {
@@ -87,7 +117,7 @@ textarea {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #a1a1a1;
+  background: rgb(var(--ink-muted));
   margin: 0 2px;
   animation: dot-pulse 1.2s ease-in-out infinite;
 }

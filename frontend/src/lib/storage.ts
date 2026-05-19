@@ -17,3 +17,43 @@ export function loadSelection(): ProviderSelection | null {
 export function saveSelection(sel: ProviderSelection): void {
   localStorage.setItem(SELECTION_KEY, JSON.stringify(sel));
 }
+
+const THEME_KEY = "kgent_theme";
+
+export type Theme = "dark" | "light";
+
+export function loadTheme(): Theme {
+  try {
+    const raw = localStorage.getItem(THEME_KEY);
+    if (raw === "dark" || raw === "light") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "dark";
+}
+
+export function saveTheme(theme: Theme): void {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* ignore */
+  }
+}
+
+const SIDEBAR_KEY = "kgent_sidebar_open";
+
+export function loadSidebarOpen(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function saveSidebarOpen(open: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_KEY, open ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}

@@ -5,8 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <title>kgent</title>
-    <script type="module" crossorigin src="/assets/index-C2wGk-ya.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index--lGs_3H7.css">
+    <script>
+      // Apply the saved theme before paint to avoid a flash
+      try {
+        if (localStorage.getItem("kgent_theme") === "light") {
+          document.documentElement.classList.remove("dark");
+          document.documentElement.classList.add("light");
+        }
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/assets/index-BozLO0i_.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B_Hk_Jrf.css">
   </head>
   <body>
     <div id="root"></div>

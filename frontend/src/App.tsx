@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import {
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
 import Message, { ChatMessage } from "./components/Message";
@@ -21,7 +27,15 @@ import {
   type ProviderInfo,
   type StoreInfo,
 } from "./lib/api";
-import { loadSelection, saveSelection } from "./lib/storage";
+import {
+  loadSelection,
+  saveSelection,
+  loadTheme,
+  saveTheme,
+  loadSidebarOpen,
+  saveSidebarOpen,
+  type Theme,
+} from "./lib/storage";
 
 export default function App() {
   const [info, setInfo] = useState<StoreInfo | null>(null);
@@ -35,6 +49,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
   const scroller = useRef<HTMLDivElement>(null);
   const toastSeq = useRef(0);
 
@@ -70,6 +86,22 @@ export default function App() {
     getStoreInfo().then(setInfo).catch(() => setInfo(null));
     refreshProviders();
   }, [refreshProviders]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("dark", theme === "dark");
+    root.classList.toggle("light", theme === "light");
+    saveTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = () =>
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+
+  const toggleSidebar = () =>
+    setSidebarOpen((open) => {
+      saveSidebarOpen(!open);
+      return !open;
+    });
 
   useEffect(() => {
     scroller.current?.scrollTo({
@@ -265,33 +297,57 @@ export default function App() {
 
   return (
     <div className="h-full flex bg-bg text-ink">
-      <Sidebar
-        info={info}
-        activeConvId={activeConvId}
-        conversationsRefresh={conversationsRefresh}
-        onSelectConversation={handleSelectConversation}
-        onNewChat={handleNewChat}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenIngest={() => setIngestOpen(true)}
-        onError={(msg) => pushToast("error", msg)}
-      />
+      {sidebarOpen && (
+        <Sidebar
+          info={info}
+          activeConvId={activeConvId}
+          conversationsRefresh={conversationsRefresh}
+          onSelectConversation={handleSelectConversation}
+          onNewChat={handleNewChat}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenIngest={() => setIngestOpen(true)}
+          onError={(msg) => pushToast("error", msg)}
+        />
+      )}
 
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="border-b border-border px-4 py-2.5 flex items-center justify-end gap-3">
-          <ProviderPicker
-            providers={providers}
-            selectedProvider={provider}
-            selectedModel={model}
-            onChange={handleProviderChange}
-            onOpenSettings={() => setSettingsOpen(true)}
-          />
+        <header className="border-b border-border px-4 py-2.5 flex items-center justify-between gap-3">
           <button
-            onClick={() => setSettingsOpen(true)}
+            onClick={toggleSidebar}
             className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg-card transition-colors"
-            aria-label="Settings"
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
-            <SettingsIcon size={16} />
+            {sidebarOpen ? (
+              <PanelLeftClose size={16} />
+            ) : (
+              <PanelLeftOpen size={16} />
+            )}
           </button>
+          <div className="flex items-center gap-3">
+            <ProviderPicker
+              providers={providers}
+              selectedProvider={provider}
+              selectedModel={model}
+              onChange={handleProviderChange}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg-card transition-colors"
+              aria-label="Toggle theme"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg-card transition-colors"
+              aria-label="Settings"
+            >
+              <SettingsIcon size={16} />
+            </button>
+          </div>
         </header>
 
         <div ref={scroller} className="flex-1 overflow-y-auto">

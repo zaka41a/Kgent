@@ -2,7 +2,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { User, Sparkles, FileText, Copy, Check, RefreshCw } from "lucide-react";
+import { User, Bot, FileText, Copy, Check, RefreshCw } from "lucide-react";
 import type { Chunk } from "../lib/api";
 
 export interface ChatMessage {
@@ -37,7 +37,7 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
     <div className={`py-6 ${isUser ? "" : "bg-bg-soft/40"} animate-fade-in`}>
       <div className="max-w-3xl mx-auto px-4 flex gap-4">
         <div className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center bg-bg-card border border-border">
-          {isUser ? <User size={16} /> : <Sparkles size={16} className="text-accent" />}
+          {isUser ? <User size={16} /> : <Bot size={16} className="text-accent" />}
         </div>
         <div className="flex-1 min-w-0 prose-chat">
           {message.pending && !message.content ? (

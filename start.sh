@@ -35,6 +35,35 @@ if ! command -v kgent >/dev/null 2>&1; then
   pip install -e "$ROOT" >/dev/null
 fi
 
+# Rebuild the frontend bundle when it is missing or older than the sources.
+# Skip with KGENT_SKIP_BUILD=1.
+WEB_INDEX="$ROOT/kgent/web/index.html"
+if [[ -d "$ROOT/frontend" && "${KGENT_SKIP_BUILD:-0}" != "1" ]]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    warn "npm not found, skipping frontend build (serving the existing bundle)."
+  else
+    needs_build=0
+    if [[ ! -f "$WEB_INDEX" ]]; then
+      needs_build=1
+    elif [[ -n "$(find "$ROOT/frontend/src" "$ROOT/frontend/index.html" \
+        "$ROOT/frontend/tailwind.config.js" -newer "$WEB_INDEX" 2>/dev/null)" ]]; then
+      needs_build=1
+    fi
+    if [[ "$needs_build" == "1" ]]; then
+      info "Building the frontend bundle..."
+      build_ok=1
+      if [[ ! -d "$ROOT/frontend/node_modules" ]]; then
+        ( cd "$ROOT/frontend" && npm install ) || build_ok=0
+      fi
+      if [[ "$build_ok" == "1" ]] && ( cd "$ROOT/frontend" && npm run build ); then
+        info "Frontend bundle rebuilt."
+      else
+        warn "Frontend build failed, serving the existing bundle."
+      fi
+    fi
+  fi
+fi
+
 if command -v ollama >/dev/null 2>&1; then
   if ! curl -s -o /dev/null -m 1 "http://localhost:11434/api/tags"; then
     info "Starting local Ollama daemon..."
