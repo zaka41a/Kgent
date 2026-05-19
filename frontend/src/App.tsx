@@ -125,7 +125,7 @@ export default function App() {
   };
 
   const submit = async (text: string, regenerateFromIndex?: number) => {
-    let history: ChatHistoryMessage[] = [];
+    let history: ChatHistoryMessage[];
     let working: ChatMessage[];
 
     if (regenerateFromIndex !== undefined) {

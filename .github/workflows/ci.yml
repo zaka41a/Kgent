@@ -62,8 +62,14 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npx tsc -b --noEmit
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build
