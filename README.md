@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="kgent/web_assets/logo.svg" width="84" alt="kgent logo" />
+  <img src="frontend/public/logo.svg" width="84" alt="kgent logo" />
   <h1><span style="color:#10a37f">k</span>gent</h1>
   <p><strong>A knowledge graph aware RAG chat assistant over your codebases, documentation, emails, PDF and Word files.</strong></p>
   <p>
@@ -226,8 +226,7 @@ kgent/
 │   ├── settings.py       Pydantic environment configuration
 │   ├── logging_config.py logging setup
 │   ├── cli.py            click based CLI
-│   ├── web/              built React assets (served at /)
-│   └── web_assets/       static assets (logo)
+│   └── web/              built React assets (served at /)
 ├── frontend/             React + Vite + Tailwind source
 ├── tests/                pytest suite
 ├── Dockerfile            production image (multi stage build)
