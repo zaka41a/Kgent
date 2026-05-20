@@ -1,6 +1,5 @@
 <div align="center">
   <img src="frontend/public/logo.svg" width="84" alt="kgent logo" />
-  <h1><span style="color:#10a37f">k</span>gent</h1>
   <p><strong>A knowledge graph aware RAG chat assistant over your codebases, documentation, emails, PDF and Word files.</strong></p>
   <p>
     <a href="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml"><img src="https://github.com/zaka41a/Kgent/actions/workflows/ci.yml/badge.svg" alt="ci" /></a>
