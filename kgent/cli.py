@@ -84,10 +84,23 @@ def chat_cmd(store_path: Path | None, k: int) -> None:
 @click.argument("dataset", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
 @click.option("-k", default=5, show_default=True, help="Chunks retrieved per question.")
+@click.option(
+    "--store-kind",
+    type=click.Choice(["json", "chroma", "auto"]),
+    default=None,
+    help="Store backend. Defaults to KGENT_STORE / settings.",
+)
 @click.option("--verbose", is_flag=True, help="Show per-question results.")
-def eval_cmd(dataset: Path, store_path: Path | None, k: int, verbose: bool) -> None:
+def eval_cmd(
+    dataset: Path,
+    store_path: Path | None,
+    k: int,
+    store_kind: str | None,
+    verbose: bool,
+) -> None:
     target = store_path or _default_store_path()
-    store = get_store("json", target)
+    kind = store_kind or get_settings().store_kind
+    store = get_store(kind, target)
     if store.count() == 0:
         raise click.ClickException("Store is empty. Run `kgent ingest <path>` first.")
 
@@ -105,6 +118,7 @@ def eval_cmd(dataset: Path, store_path: Path | None, k: int, verbose: bool) -> N
             )
         click.echo("")
 
+    click.echo(f"Store:         {kind}")
     click.echo(f"Cases:         {report.n}")
     click.echo(f"hit@{k}:         {report.hit_rate:.1%}")
     click.echo(f"MRR:           {report.mrr:.3f}")
