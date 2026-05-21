@@ -82,6 +82,9 @@ class JsonStore:
     def count(self) -> int:
         return len(self._chunks)
 
+    def all_chunks(self) -> list[Chunk]:
+        return list(self._chunks)
+
 
 def get_store(kind: str, path: Path) -> VectorStore:
     if kind == "auto":

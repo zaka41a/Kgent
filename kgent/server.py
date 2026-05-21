@@ -22,6 +22,7 @@ from .agent import (
 )
 from .chat_store import ChatStore
 from .graph import KGraph, build_cooccurrence_graph
+from .graph_store import load_graph, save_graph
 from .ingest import Chunk, ingest_path
 from .logging_config import configure_logging, get_logger
 from .retriever import retrieve_with_graph
@@ -161,9 +162,26 @@ class _State:
         self._maybe_rebuild_graph()
 
     def _maybe_rebuild_graph(self) -> None:
-        chunks = getattr(self.store, "_chunks", None)
-        if chunks:
+        if hasattr(self.store, "all_chunks"):
+            chunks = self.store.all_chunks()
+        else:
+            chunks = getattr(self.store, "_chunks", []) or []
+        if not chunks:
+            return
+        mode = self.settings.graph_mode
+        if mode == "off":
+            return
+        cached = load_graph(self.store_path, chunk_count=len(chunks), mode=mode)
+        if cached is not None:
+            self.graph = cached
+            log.info("loaded cached %s graph (%d nodes, %d edges)",
+                     mode, len(cached.nodes), len(cached.edges))
+            return
+        if mode == "cooccurrence":
             self.graph = build_cooccurrence_graph(chunks, min_count=3)
+            save_graph(self.graph, self.store_path, len(chunks), mode)
+        # mode == "entity" is too slow to do at startup; build it lazily
+        # via the CLI or the ingest job. We still serve any cached version.
 
 
 def _run_ingest_job(state: _State, job_id: str, target: Path, replace: bool) -> None:
@@ -200,8 +218,16 @@ def _run_ingest_job(state: _State, job_id: str, target: Path, replace: bool) -> 
                 "document_count": len(docs),
                 "chunk_count": state.store.count(),
             })
-        if chunks:
+        if chunks and state.settings.graph_mode == "cooccurrence":
             state.graph = build_cooccurrence_graph(chunks, min_count=3)
+            save_graph(state.graph, state.store_path, len(chunks), "cooccurrence")
+        elif chunks and state.settings.graph_mode == "entity":
+            # Entity extraction is too slow to inline in the ingest job;
+            # the user triggers it explicitly via `kgent graph build`.
+            log.info(
+                "entity graph mode enabled; run `kgent graph build` to extract "
+                "(this is slow). The vector index is ready."
+            )
 
         job["documents"] = len(docs)
         job["chunks"] = len(chunks)

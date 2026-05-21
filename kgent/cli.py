@@ -4,8 +4,10 @@ from pathlib import Path
 
 import click
 
-from .agent import answer, build_default_client
+from .agent import answer, build_client, build_default_client
 from .eval import evaluate, load_cases
+from .graph import build_cooccurrence_graph, build_entity_graph
+from .graph_store import delete_graph, graph_path_for, save_graph
 from .ingest import ingest_path
 from .logging_config import configure_logging
 from .retriever import retrieve
@@ -124,6 +126,93 @@ def eval_cmd(
     click.echo(f"MRR:           {report.mrr:.3f}")
     click.echo(f"recall@{k}:      {report.recall:.1%}")
     click.echo(f"precision@{k}:   {report.precision:.1%}")
+
+
+@main.group("graph", help="Inspect or build the knowledge graph.")
+def graph_group() -> None:
+    pass
+
+
+@graph_group.command("build", help="Build the knowledge graph from the indexed chunks.")
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--mode",
+    type=click.Choice(["cooccurrence", "entity"]),
+    default=None,
+    help="Defaults to KGENT_GRAPH_MODE (currently set in your settings).",
+)
+@click.option(
+    "--provider",
+    default=None,
+    help="LLM provider for entity mode (defaults to your default provider).",
+)
+@click.option(
+    "--model",
+    default=None,
+    help="LLM model for entity mode (defaults to KGENT_GRAPH_MODEL or your default model).",
+)
+def graph_build(
+    store_path: Path | None,
+    mode: str | None,
+    provider: str | None,
+    model: str | None,
+) -> None:
+    settings = get_settings()
+    target = store_path or settings.store_path
+    chosen_mode = mode or settings.graph_mode
+    if chosen_mode == "off":
+        raise click.ClickException(
+            "KGENT_GRAPH_MODE is set to 'off'. Pass --mode cooccurrence or --mode entity."
+        )
+
+    store = get_store(settings.store_kind, target)
+    if hasattr(store, "all_chunks"):
+        chunks = store.all_chunks()
+    else:
+        chunks = getattr(store, "_chunks", []) or []
+    if not chunks:
+        raise click.ClickException("Store has no chunks. Run `kgent ingest <path>` first.")
+
+    if chosen_mode == "cooccurrence":
+        click.echo(f"Building co-occurrence graph from {len(chunks)} chunks...")
+        graph = build_cooccurrence_graph(chunks, min_count=3)
+    else:
+        client_model = model or settings.graph_model or None
+        if provider:
+            extractor = build_client(provider, client_model)
+        else:
+            extractor = build_default_client()
+            if client_model:
+                extractor.model = client_model
+        click.echo(
+            f"Extracting entities from {len(chunks)} chunks using "
+            f"{extractor.name}/{extractor.model} (this can take a while)..."
+        )
+
+        def _progress(done: int, total: int) -> None:
+            if done % 10 == 0 or done == total:
+                click.echo(f"  {done}/{total} chunks processed", err=True)
+
+        graph = build_entity_graph(chunks, extractor, on_progress=_progress)
+
+    if not graph.nodes:
+        click.echo("No entities/terms could be extracted; not writing a graph.", err=True)
+        delete_graph(target)
+        return
+
+    save_graph(graph, target, len(chunks), chosen_mode)
+    click.echo(
+        f"Built {chosen_mode} graph with {len(graph.nodes)} nodes "
+        f"and {len(graph.edges)} edges -> {graph_path_for(target)}"
+    )
+
+
+@graph_group.command("clear", help="Delete the cached knowledge graph.")
+@click.option("--store", "store_path", type=click.Path(path_type=Path), default=None)
+def graph_clear(store_path: Path | None) -> None:
+    target = store_path or get_settings().store_path
+    delete_graph(target)
+    click.echo(f"Removed {graph_path_for(target)} (if it existed).")
 
 
 @main.command("serve", help="Run the web UI and REST API.")

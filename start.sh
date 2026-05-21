@@ -72,6 +72,55 @@ if command -v ollama >/dev/null 2>&1; then
   fi
 fi
 
+# Auto-build the knowledge graph when needed. Cooccurrence is built by the
+# server itself at startup (it is fast). Entity mode requires an LLM call per
+# chunk, so we do it here, before the server starts, only when the cache is
+# missing or stale. Skip with KGENT_SKIP_GRAPH=1.
+if [[ -f "$ROOT/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a; . "$ROOT/.env"; set +a
+fi
+GRAPH_MODE="${KGENT_GRAPH_MODE:-cooccurrence}"
+GRAPH_FILE="$ROOT/.kgent_store/graph.json"
+if [[ "${KGENT_SKIP_GRAPH:-0}" != "1" && "$GRAPH_MODE" == "entity" ]]; then
+  cached_mode=""
+  if [[ -f "$GRAPH_FILE" ]]; then
+    cached_mode="$(python -c "import json,sys; print(json.load(open('$GRAPH_FILE')).get('mode',''))" 2>/dev/null || true)"
+  fi
+  if [[ "$cached_mode" != "entity" ]]; then
+    # Pick the cheapest available extractor: Groq > OpenAI > Anthropic > Ollama
+    EXTRACT_PROVIDER=""
+    EXTRACT_MODEL=""
+    if [[ -n "${GROQ_API_KEY:-}" ]]; then
+      EXTRACT_PROVIDER="groq"
+      EXTRACT_MODEL="${KGENT_GRAPH_MODEL:-llama-3.3-70b-versatile}"
+    elif [[ -n "${OPENAI_API_KEY:-}" ]]; then
+      EXTRACT_PROVIDER="openai"
+      EXTRACT_MODEL="${KGENT_GRAPH_MODEL:-gpt-4o-mini}"
+    elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+      EXTRACT_PROVIDER="anthropic"
+      EXTRACT_MODEL="${KGENT_GRAPH_MODEL:-claude-haiku-4-5-20251001}"
+    elif command -v ollama >/dev/null 2>&1; then
+      EXTRACT_PROVIDER="ollama"
+      EXTRACT_MODEL="${KGENT_GRAPH_MODEL:-${OLLAMA_MODEL:-mistral}}"
+    fi
+
+    if [[ -z "$EXTRACT_PROVIDER" ]]; then
+      warn "KGENT_GRAPH_MODE=entity but no LLM is available. Falling back to cooccurrence."
+      warn "Set GROQ_API_KEY (or OPENAI_API_KEY / ANTHROPIC_API_KEY) in .env, or install Ollama."
+      export KGENT_GRAPH_MODE=cooccurrence
+    else
+      info "Building entity graph with $EXTRACT_PROVIDER/$EXTRACT_MODEL (this can take a few minutes)..."
+      if kgent graph build --provider "$EXTRACT_PROVIDER" --model "$EXTRACT_MODEL"; then
+        info "Entity graph ready."
+      else
+        warn "Entity graph build failed. Falling back to cooccurrence for this session."
+        export KGENT_GRAPH_MODE=cooccurrence
+      fi
+    fi
+  fi
+fi
+
 info "Starting kgent on http://$HOST:$PORT"
 nohup kgent serve --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
 echo $! >"$PID_FILE"

@@ -78,6 +78,24 @@ class ChromaStore:
     def count(self) -> int:
         return self.collection.count()
 
+    def all_chunks(self) -> list[Chunk]:
+        if self.collection.count() == 0:
+            return []
+        result = self.collection.get()
+        documents = result.get("documents", [])
+        metadatas = result.get("metadatas", [])
+        chunks: list[Chunk] = []
+        for text_i, meta in zip(documents, metadatas, strict=False):
+            chunks.append(
+                Chunk(
+                    doc_path=meta.get("doc_path", "?"),
+                    kind=meta.get("kind", "text"),
+                    index=int(meta.get("index", 0)),
+                    text=text_i,
+                )
+            )
+        return chunks
+
     def get_meta(self) -> dict:
         if not self._meta_path.exists():
             return {}

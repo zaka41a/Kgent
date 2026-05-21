@@ -46,6 +46,12 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     )
     ollama_model: str = Field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "mistral"))
+    graph_mode: Literal["cooccurrence", "entity", "off"] = Field(
+        default_factory=lambda: os.getenv("KGENT_GRAPH_MODE", "cooccurrence").lower()
+    )
+    graph_model: str = Field(
+        default_factory=lambda: os.getenv("KGENT_GRAPH_MODEL", "")
+    )
 
 
 def _split_csv(value: str) -> list[str]:
