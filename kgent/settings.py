@@ -52,6 +52,9 @@ class Settings(BaseModel):
     graph_model: str = Field(
         default_factory=lambda: os.getenv("KGENT_GRAPH_MODEL", "")
     )
+    persist_keys: bool = Field(
+        default_factory=lambda: os.getenv("KGENT_PERSIST_KEYS", "0") == "1"
+    )
 
 
 def _split_csv(value: str) -> list[str]:

@@ -131,6 +131,40 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
   return res.json();
 }
 
+export interface GraphBuildRequest {
+  mode: "cooccurrence" | "entity";
+  provider?: string;
+  model?: string;
+}
+
+export interface GraphJob {
+  job_id: string;
+  state: "pending" | "running" | "completed" | "failed";
+  phase: string;
+  mode: string;
+  processed: number;
+  total: number;
+  nodes: number;
+  edges: number;
+  error: string | null;
+}
+
+export async function startGraphBuild(req: GraphBuildRequest): Promise<{ job_id: string }> {
+  const res = await fetch("/api/graph/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getGraphStatus(jobId: string): Promise<GraphJob> {
+  const res = await fetch(`/api/graph/status/${jobId}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const res = await fetch(`/api/conversations/${id}`, {
     method: "DELETE",

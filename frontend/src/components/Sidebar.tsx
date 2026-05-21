@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Plus,
   FileText,
@@ -6,8 +7,10 @@ import {
   Settings as SettingsIcon,
   FolderPlus,
   FolderGit2,
+  Network,
+  Loader2,
 } from "lucide-react";
-import type { StoreInfo } from "../lib/api";
+import { getGraphStatus, startGraphBuild, type StoreInfo } from "../lib/api";
 import ConversationList from "./ConversationList";
 
 interface Props {
@@ -19,6 +22,9 @@ interface Props {
   onOpenSettings: () => void;
   onOpenIngest: () => void;
   onError: (msg: string) => void;
+  onGraphBuilt?: () => void;
+  selectedProvider?: string;
+  selectedModel?: string;
 }
 
 export default function Sidebar({
@@ -30,7 +36,49 @@ export default function Sidebar({
   onOpenSettings,
   onOpenIngest,
   onError,
+  onGraphBuilt,
+  selectedProvider,
+  selectedModel,
 }: Props) {
+  const [graphPhase, setGraphPhase] = useState<string | null>(null);
+  const [graphProgress, setGraphProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const buildEntityGraph = async () => {
+    setGraphPhase("starting");
+    try {
+      const { job_id } = await startGraphBuild({
+        mode: "entity",
+        provider: selectedProvider,
+        model: selectedModel,
+      });
+      const poll = async (): Promise<void> => {
+        const job = await getGraphStatus(job_id);
+        setGraphPhase(job.phase);
+        if (job.total > 0) {
+          setGraphProgress({ done: job.processed, total: job.total });
+        }
+        if (job.state === "completed") {
+          setGraphPhase(null);
+          setGraphProgress(null);
+          onGraphBuilt?.();
+          return;
+        }
+        if (job.state === "failed") {
+          setGraphPhase(null);
+          setGraphProgress(null);
+          onError(job.error ?? "Graph build failed");
+          return;
+        }
+        setTimeout(poll, 2000);
+      };
+      void poll();
+    } catch (err) {
+      setGraphPhase(null);
+      setGraphProgress(null);
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const repoLabel = info?.active_repo
     ? info.active_repo.split("/").slice(-2).join("/")
     : "no repository indexed";
@@ -103,6 +151,30 @@ export default function Sidebar({
               <Database size={12} />
               <span className="truncate">{info?.store_kind ?? ""}</span>
             </div>
+            {info && info.count > 0 && (
+              <button
+                onClick={buildEntityGraph}
+                disabled={graphPhase !== null}
+                className="mt-2 w-full flex items-center justify-center gap-2 rounded-md border border-border bg-bg-card px-2 py-1.5 text-xs text-ink-muted hover:text-ink hover:bg-bg-card/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Re-extract entities and relations from indexed chunks using the selected LLM"
+              >
+                {graphPhase === null ? (
+                  <>
+                    <Network size={12} />
+                    <span>Rebuild entity graph</span>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>
+                      {graphProgress
+                        ? `${graphProgress.done}/${graphProgress.total} chunks`
+                        : graphPhase}
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div>

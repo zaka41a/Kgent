@@ -21,9 +21,10 @@ from .agent import (
     list_providers,
 )
 from .chat_store import ChatStore
-from .graph import KGraph, build_cooccurrence_graph
+from .graph import KGraph, build_cooccurrence_graph, build_entity_graph
 from .graph_store import load_graph, save_graph
 from .ingest import Chunk, ingest_path
+from .keystore import merge_request_keys
 from .logging_config import configure_logging, get_logger
 from .retriever import retrieve_with_graph
 from .settings import Settings, get_settings
@@ -61,6 +62,12 @@ class IngestRequest(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str = "New chat"
+    provider: str | None = None
+    model: str | None = None
+
+
+class GraphBuildRequest(BaseModel):
+    mode: str = "entity"
     provider: str | None = None
     model: str | None = None
 
@@ -159,6 +166,7 @@ class _State:
         self.graph: KGraph | None = None
         self.chats = ChatStore(db_url=settings.db_url)
         self.ingest_jobs: dict[str, dict] = {}
+        self.graph_jobs: dict[str, dict] = {}
         self._maybe_rebuild_graph()
 
     def _maybe_rebuild_graph(self) -> None:
@@ -240,6 +248,65 @@ def _run_ingest_job(state: _State, job_id: str, target: Path, replace: bool) -> 
         )
     except Exception as exc:
         log.exception("ingest job %s failed for %s", job_id, target)
+        job["state"] = "failed"
+        job["phase"] = "error"
+        job["error"] = str(exc)
+
+
+def _run_graph_build_job(
+    state: _State,
+    job_id: str,
+    mode: str,
+    provider: str | None,
+    model: str | None,
+    api_keys: dict[str, str],
+) -> None:
+    """Build the knowledge graph in the background and update the job record."""
+    job = state.graph_jobs[job_id]
+    try:
+        job["state"] = "running"
+        job["phase"] = "loading_chunks"
+        if hasattr(state.store, "all_chunks"):
+            chunks = state.store.all_chunks()
+        else:
+            chunks = getattr(state.store, "_chunks", []) or []
+        if not chunks:
+            raise RuntimeError("Store has no chunks. Ingest a path first.")
+        job["total"] = len(chunks)
+
+        if mode == "cooccurrence":
+            job["phase"] = "building"
+            graph = build_cooccurrence_graph(chunks, min_count=3)
+        elif mode == "entity":
+            if provider:
+                extractor = build_client(provider, model, api_keys=api_keys)
+            else:
+                extractor = build_default_client()
+                if model:
+                    extractor.model = model
+
+            def on_progress(done: int, total: int) -> None:
+                job["processed"] = done
+                job["total"] = total
+                job["phase"] = "extracting"
+
+            graph = build_entity_graph(chunks, extractor, on_progress=on_progress)
+        else:
+            raise ValueError(f"unknown graph mode: {mode!r}")
+
+        save_graph(graph, state.store_path, len(chunks), mode)
+        state.graph = graph
+
+        job["nodes"] = len(graph.nodes)
+        job["edges"] = len(graph.edges)
+        job["phase"] = "done"
+        job["state"] = "completed"
+        log.info(
+            "graph build %s finished: mode=%s nodes=%d edges=%d",
+            job_id, mode, len(graph.nodes), len(graph.edges),
+        )
+    except Exception as exc:
+        log.exception("graph build %s failed", job_id)
         job["state"] = "failed"
         job["phase"] = "error"
         job["error"] = str(exc)
@@ -330,6 +397,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = state.ingest_jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail=f"Unknown ingest job: {job_id}")
+        return job
+
+    @app.post("/api/graph/build", status_code=202)
+    def graph_build_endpoint(
+        req: GraphBuildRequest,
+        x_kgent_keys: str | None = Header(default=None),
+    ) -> dict:
+        if req.mode not in ("cooccurrence", "entity"):
+            raise HTTPException(status_code=400, detail=f"unknown mode: {req.mode!r}")
+        request_keys = _parse_api_keys(x_kgent_keys)
+        api_keys = merge_request_keys(
+            state.store_path, request_keys, persist=state.settings.persist_keys
+        )
+        job_id = uuid.uuid4().hex[:12]
+        state.graph_jobs[job_id] = {
+            "job_id": job_id,
+            "state": "pending",
+            "phase": "queued",
+            "mode": req.mode,
+            "processed": 0,
+            "total": 0,
+            "nodes": 0,
+            "edges": 0,
+            "error": None,
+        }
+        thread = threading.Thread(
+            target=_run_graph_build_job,
+            args=(state, job_id, req.mode, req.provider, req.model, api_keys),
+            daemon=True,
+        )
+        thread.start()
+        return {"job_id": job_id, "state": "pending"}
+
+    @app.get("/api/graph/status/{job_id}")
+    def graph_build_status(job_id: str) -> dict:
+        job = state.graph_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Unknown graph job: {job_id}")
         return job
 
     @app.post("/api/ask")

@@ -9,6 +9,7 @@ from .eval import evaluate, load_cases
 from .graph import build_cooccurrence_graph, build_entity_graph
 from .graph_store import delete_graph, graph_path_for, save_graph
 from .ingest import ingest_path
+from .keystore import load_keys
 from .logging_config import configure_logging
 from .retriever import retrieve
 from .settings import get_settings
@@ -178,8 +179,9 @@ def graph_build(
         graph = build_cooccurrence_graph(chunks, min_count=3)
     else:
         client_model = model or settings.graph_model or None
+        disk_keys = load_keys(target)
         if provider:
-            extractor = build_client(provider, client_model)
+            extractor = build_client(provider, client_model, api_keys=disk_keys)
         else:
             extractor = build_default_client()
             if client_model:
