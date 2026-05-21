@@ -307,6 +307,12 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenIngest={() => setIngestOpen(true)}
           onError={(msg) => pushToast("error", msg)}
+          onGraphBuilt={() => {
+            getStoreInfo().then(setInfo).catch(() => undefined);
+            pushToast("success", "Entity graph rebuilt.");
+          }}
+          selectedProvider={provider}
+          selectedModel={model}
         />
       )}
 

@@ -25,12 +25,13 @@ Point kgent at any folder. It extracts text from your files, indexes the chunks,
 * Many formats. Markdown, source code, plain text, PDF, Word, and Thunderbird email exports (.eml and .mbox) with attachment extraction.
 * Multi LLM. Ollama (local), OpenAI, Anthropic Claude, Groq.
 * Multi store. Keyword (default, zero config) or vector embeddings via Chroma.
-* GraphRAG. Vector top k combined with a graph hop on the co occurrence graph.
+* GraphRAG. Vector top k combined with a graph hop. Two graph modes: fast co occurrence (built at startup) or LLM extracted typed entities and relations (cached on disk).
 * Robust ingestion. Runs in the background with live progress, respects .gitignore, and skips oversized or minified files.
 * Streaming. Server Sent Events stream responses token by token.
 * Persistent chat. SQLite by default, Postgres in production.
-* Web UI. React interface with provider switcher, settings modal, ingest flow.
-* CLI. Pipe friendly commands for ingest, query, chat, and serve.
+* Retrieval evaluation. `kgent eval` reports hit@k, MRR, recall and precision against a labelled JSONL dataset.
+* Web UI. React interface with light and dark mode, collapsible sidebar, provider switcher, settings modal, ingest flow, and a one click button to rebuild the entity graph.
+* CLI. Pipe friendly commands for ingest, query, chat, eval, graph build, and serve.
 
 ## Install
 
@@ -130,16 +131,22 @@ All configuration is via environment variables. None is required.
 | `OPENAI_API_KEY` | unset | OpenAI provider |
 | `ANTHROPIC_API_KEY` | unset | Anthropic Claude provider |
 | `GROQ_API_KEY` | unset | Groq provider |
+| `KGENT_GRAPH_MODE` | `cooccurrence` | `cooccurrence` (fast, term graph built at startup), `entity` (typed entities and relations extracted by an LLM, cached on disk), or `off` |
+| `KGENT_GRAPH_MODEL` | unset | Model name used when building the entity graph. Defaults to the active provider's default. |
+| `KGENT_PERSIST_KEYS` | `0` | When `1`, the server caches API keys received from the browser in `.kgent_store/keys.json` (chmod 0600) so the CLI and `start.sh` auto-build can reuse them. Off by default. |
 
-API keys can also be saved via the in app settings modal. They are persisted to the browser's `localStorage` and forwarded as a header on each request. The server never persists them.
+API keys can be saved via the in app settings modal. They live in the browser's `localStorage` and are forwarded with each request. The server only writes them to disk when `KGENT_PERSIST_KEYS=1`.
 
 ## CLI
 
 ```bash
-kgent ingest <path>            # index a directory
-kgent query "your question"    # retrieval only, no LLM
-kgent chat                     # interactive REPL
-kgent serve --port 8088        # run the HTTP API + UI
+kgent ingest <path>                              # index a directory
+kgent query "your question"                      # retrieval only, no LLM
+kgent chat                                       # interactive REPL
+kgent serve --port 8088                          # run the HTTP API + UI
+kgent eval examples/eval.jsonl                   # measure retrieval quality (hit@k, MRR, recall)
+kgent graph build [--mode entity] [--provider]   # (re)build the knowledge graph
+kgent graph clear                                # delete the cached graph
 ```
 
 ## HTTP API
@@ -150,6 +157,8 @@ GET    /api/store/info
 GET    /api/providers
 POST   /api/ingest               { "path", "replace" }, starts a background job, returns { "job_id" }
 GET    /api/ingest/status/{id}   ingestion progress for a running or finished job
+POST   /api/graph/build          { "mode", "provider", "model" }, starts a background graph build
+GET    /api/graph/status/{id}    graph build progress and result counts
 POST   /api/ask                  { "question", "k", "provider", "model", "history", "conversation_id" }
 POST   /api/ask/stream           same body, returns SSE
 GET    /api/conversations
@@ -163,15 +172,15 @@ Bring your own keys by sending the `X-Kgent-Keys` header with a JSON object of k
 ## Architecture
 
 ```
-Client (React)                          Server (FastAPI)                   Backends
+Client (React)                   Server (FastAPI)                      Backends
                                                                           
 provider picker            ───►  POST /api/ask/stream
 ingest modal                       │
-chat (multi turn,                  ▼
- streaming, copy/regen)     retriever ──► JsonStore | ChromaStore
-                                   │
+sidebar + rebuild graph            ▼
+chat (multi turn,           retriever ──► JsonStore | ChromaStore
+ streaming, copy/regen)            │
                                    ▼
-                            graph hop on KGraph (co occurrence)
+                            graph hop on KGraph (cooccurrence or LLM entities)
                                    │
                                    ▼
                             agent.complete / stream                ──►  ollama / openai
@@ -217,9 +226,12 @@ kgent/
 │   ├── extractors.py     PDF, Word, and email text extraction
 │   ├── store.py          JsonStore + provider selector
 │   ├── stores_chroma.py  Chroma vector store (opt in)
-│   ├── graph.py          co occurrence graph
+│   ├── graph.py          co occurrence + LLM entity graph builders
+│   ├── graph_store.py    on disk graph cache
 │   ├── retriever.py      retrieve_with_graph
 │   ├── agent.py          Ollama / OpenAI / Anthropic / Groq clients
+│   ├── eval.py           retrieval quality metrics (hit@k, MRR, recall)
+│   ├── keystore.py       optional on disk API key cache (off by default)
 │   ├── chat_store.py     SQLAlchemy persistence for conversations
 │   ├── server.py         FastAPI app
 │   ├── settings.py       Pydantic environment configuration
