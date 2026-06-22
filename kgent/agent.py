@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -50,13 +51,12 @@ class OllamaClient:
             timeout=300.0,
         ) as resp:
             resp.raise_for_status()
-            import json as _json
             for line in resp.iter_lines():
                 if not line:
                     continue
                 try:
-                    payload = _json.loads(line)
-                except _json.JSONDecodeError:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
                     continue
                 if payload.get("response"):
                     yield payload["response"]
@@ -106,7 +106,6 @@ class OpenAIClient:
             timeout=120.0,
         ) as resp:
             resp.raise_for_status()
-            import json as _json
             for raw in resp.iter_lines():
                 if not raw or not raw.startswith("data:"):
                     continue
@@ -114,8 +113,8 @@ class OpenAIClient:
                 if data == "[DONE]":
                     break
                 try:
-                    payload = _json.loads(data)
-                except _json.JSONDecodeError:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
                     continue
                 delta = payload.get("choices", [{}])[0].get("delta", {}).get("content")
                 if delta:
@@ -174,14 +173,13 @@ class AnthropicClient:
             timeout=120.0,
         ) as resp:
             resp.raise_for_status()
-            import json as _json
             for raw in resp.iter_lines():
                 if not raw or not raw.startswith("data:"):
                     continue
                 data = raw[5:].strip()
                 try:
-                    payload = _json.loads(data)
-                except _json.JSONDecodeError:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
                     continue
                 if payload.get("type") == "content_block_delta":
                     delta = payload.get("delta", {}).get("text")
