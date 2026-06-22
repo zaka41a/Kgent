@@ -167,10 +167,7 @@ def graph_build(
         )
 
     store = get_store(settings.store_kind, target)
-    if hasattr(store, "all_chunks"):
-        chunks = store.all_chunks()
-    else:
-        chunks = getattr(store, "_chunks", []) or []
+    chunks = store.all_chunks()
     if not chunks:
         raise click.ClickException("Store has no chunks. Run `kgent ingest <path>` first.")
 

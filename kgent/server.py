@@ -170,10 +170,7 @@ class _State:
         self._maybe_rebuild_graph()
 
     def _maybe_rebuild_graph(self) -> None:
-        if hasattr(self.store, "all_chunks"):
-            chunks = self.store.all_chunks()
-        else:
-            chunks = getattr(self.store, "_chunks", []) or []
+        chunks = self.store.all_chunks()
         if not chunks:
             return
         mode = self.settings.graph_mode
@@ -266,10 +263,7 @@ def _run_graph_build_job(
     try:
         job["state"] = "running"
         job["phase"] = "loading_chunks"
-        if hasattr(state.store, "all_chunks"):
-            chunks = state.store.all_chunks()
-        else:
-            chunks = getattr(state.store, "_chunks", []) or []
+        chunks = state.store.all_chunks()
         if not chunks:
             raise RuntimeError("Store has no chunks. Ingest a path first.")
         job["total"] = len(chunks)
