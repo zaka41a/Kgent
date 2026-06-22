@@ -21,7 +21,28 @@ class VectorStore(Protocol):
     def all_chunks(self) -> list[Chunk]: ...
 
 
-class JsonStore:
+class _MetaMixin:
+    """Shared on-disk corpus metadata, read from/written to ``self._meta_path``."""
+
+    _meta_path: Path
+
+    def get_meta(self) -> dict:
+        if not self._meta_path.exists():
+            return {}
+        try:
+            return json.loads(self._meta_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+    def set_meta(self, meta: dict) -> None:
+        self._meta_path.parent.mkdir(parents=True, exist_ok=True)
+        self._meta_path.write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+
+class JsonStore(_MetaMixin):
     def __init__(self, path: Path):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,21 +69,6 @@ class JsonStore:
     def _persist(self) -> None:
         self.path.write_text(
             json.dumps([asdict(c) for c in self._chunks], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-    def get_meta(self) -> dict:
-        if not self._meta_path.exists():
-            return {}
-        try:
-            return json.loads(self._meta_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-
-    def set_meta(self, meta: dict) -> None:
-        self._meta_path.parent.mkdir(parents=True, exist_ok=True)
-        self._meta_path.write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
@@ -114,7 +120,7 @@ def _path_boost(doc_path: str) -> float:
         return 2.5
     if any(p in {"docs", "doc"} for p in parts):
         return 1.6
-    if any(p in {"tests", "test", "fixtures", "_pycache_"} for p in parts):
+    if any(p in {"tests", "test", "fixtures"} for p in parts):
         return 0.5
     if "release_notes" in lower or "changelog" in lower:
         return 0.7

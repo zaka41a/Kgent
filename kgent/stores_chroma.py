@@ -5,13 +5,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .ingest import Chunk
+from .store import _MetaMixin
 
 # Chunks are sent to Chroma in slices of this size so a large repository does
 # not embed everything in one call and spike memory and CPU.
 ADD_BATCH_SIZE = 256
 
 
-class ChromaStore:
+class ChromaStore(_MetaMixin):
     COLLECTION = "kgent_chunks"
 
     def __init__(self, path: Path):
@@ -95,22 +96,3 @@ class ChromaStore:
                 )
             )
         return chunks
-
-    def get_meta(self) -> dict:
-        if not self._meta_path.exists():
-            return {}
-        import json
-
-        try:
-            return json.loads(self._meta_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
-
-    def set_meta(self, meta: dict) -> None:
-        import json
-
-        self._meta_path.parent.mkdir(parents=True, exist_ok=True)
-        self._meta_path.write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
