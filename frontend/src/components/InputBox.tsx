@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 
 interface Props {
   onSubmit: (text: string) => void;
   disabled?: boolean;
+  busy?: boolean;
+  onStop?: () => void;
 }
 
-export default function InputBox({ onSubmit, disabled }: Props) {
+export default function InputBox({ onSubmit, disabled, busy, onStop }: Props) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -43,14 +45,25 @@ export default function InputBox({ onSubmit, disabled }: Props) {
             className="flex-1 bg-transparent resize-none px-4 py-3.5 outline-none placeholder:text-ink-dim text-[15px]"
             disabled={disabled}
           />
-          <button
-            onClick={submit}
-            disabled={disabled || !value.trim()}
-            className="m-2 w-8 h-8 rounded-full bg-ink text-bg flex items-center justify-center disabled:bg-bg-card disabled:text-ink-dim transition-colors hover:bg-ink/90"
-            aria-label="Send"
-          >
-            <ArrowUp size={16} />
-          </button>
+          {busy && onStop ? (
+            <button
+              onClick={onStop}
+              className="m-2 w-8 h-8 rounded-full bg-ink text-bg flex items-center justify-center transition-colors hover:bg-ink/90"
+              aria-label="Stop"
+              title="Stop generating"
+            >
+              <Square size={14} className="fill-current" />
+            </button>
+          ) : (
+            <button
+              onClick={submit}
+              disabled={disabled || !value.trim()}
+              className="m-2 w-8 h-8 rounded-full bg-ink text-bg flex items-center justify-center disabled:bg-bg-card disabled:text-ink-dim transition-colors hover:bg-ink/90"
+              aria-label="Send"
+            >
+              <ArrowUp size={16} />
+            </button>
+          )}
         </div>
         <p className="text-center text-xs text-ink-dim mt-2">
           <span className="text-accent">k</span>gent grounds answers in the indexed documentation. Verify important details.

@@ -217,12 +217,33 @@ export interface StreamHandlers {
   onDone: () => void;
 }
 
-export async function askStream(params: AskParams, handlers: StreamHandlers): Promise<void> {
-  const res = await fetch("/api/ask/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(params),
-  });
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+
+export async function askStream(
+  params: AskParams,
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch("/api/ask/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(params),
+      signal,
+    });
+  } catch (e) {
+    if (isAbortError(e)) {
+      handlers.onDone();
+      return;
+    }
+    handlers.onError(e instanceof Error ? e.message : String(e));
+    handlers.onDone();
+    return;
+  }
+
   if (!res.ok || !res.body) {
     handlers.onError(await formatErrorBody(res));
     handlers.onDone();
@@ -233,34 +254,40 @@ export async function askStream(params: AskParams, handlers: StreamHandlers): Pr
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\n\n");
-    buffer = events.pop() ?? "";
-    for (const evt of events) {
-      const line = evt.trim();
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      try {
-        const data = JSON.parse(payload);
-        if (data.type === "context") {
-          handlers.onContext(data.context, data.provider, data.model);
-        } else if (data.type === "delta") {
-          handlers.onDelta(data.content);
-        } else if (data.type === "error") {
-          const provider = data.provider ? ` [${data.provider}` + (data.model ? `/${data.model}` : "") + "]" : "";
-          const hint = data.hint ? `\n${data.hint}` : "";
-          const msg = `${data.error || data.message || "Stream failed"}${provider}${hint}`;
-          handlers.onError(msg);
-        } else if (data.type === "done") {
-          handlers.onDone();
-          return;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const evt of events) {
+        const line = evt.trim();
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        try {
+          const data = JSON.parse(payload);
+          if (data.type === "context") {
+            handlers.onContext(data.context, data.provider, data.model);
+          } else if (data.type === "delta") {
+            handlers.onDelta(data.content);
+          } else if (data.type === "error") {
+            const provider = data.provider ? ` [${data.provider}` + (data.model ? `/${data.model}` : "") + "]" : "";
+            const hint = data.hint ? `\n${data.hint}` : "";
+            const msg = `${data.error || data.message || "Stream failed"}${provider}${hint}`;
+            handlers.onError(msg);
+          } else if (data.type === "done") {
+            handlers.onDone();
+            return;
+          }
+        } catch {
+          /* ignore malformed event */
         }
-      } catch {
-        /* ignore malformed event */
       }
+    }
+  } catch (e) {
+    if (!isAbortError(e)) {
+      handlers.onError(e instanceof Error ? e.message : String(e));
     }
   }
   handlers.onDone();

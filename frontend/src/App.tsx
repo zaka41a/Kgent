@@ -53,6 +53,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
   const scroller = useRef<HTMLDivElement>(null);
   const toastSeq = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const pushToast = useCallback((kind: "success" | "error", message: string) => {
     const id = ++toastSeq.current;
@@ -159,6 +160,9 @@ export default function App() {
     setMessages([...working, pendingMsg]);
     setBusy(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const startTime = performance.now();
     let buffer = "";
     let receivedAny = false;
@@ -227,13 +231,17 @@ export default function App() {
             return next;
           });
           setBusy(false);
+          abortRef.current = null;
           setConversationsRefresh((n) => n + 1);
         },
       },
+      controller.signal,
     );
   };
 
   const handleSubmit = (text: string) => submit(text);
+
+  const handleStop = () => abortRef.current?.abort();
 
   const handleRegenerate = (assistantIndex: number) => {
     const userMsg = messages[assistantIndex - 1];
@@ -373,7 +381,12 @@ export default function App() {
           )}
         </div>
 
-        <InputBox onSubmit={handleSubmit} disabled={busy} />
+        <InputBox
+          onSubmit={handleSubmit}
+          disabled={busy}
+          busy={busy}
+          onStop={handleStop}
+        />
       </main>
 
       <SettingsModal
