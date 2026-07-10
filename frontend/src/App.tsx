@@ -5,6 +5,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  ArrowDown,
 } from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
@@ -51,9 +52,11 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
+  const [atBottom, setAtBottom] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const toastSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const atBottomRef = useRef(true);
 
   const pushToast = useCallback((kind: "success" | "error", message: string) => {
     const id = ++toastSeq.current;
@@ -104,11 +107,22 @@ export default function App() {
       return !open;
     });
 
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
+  const handleScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    atBottomRef.current = near;
+    setAtBottom(near);
+  };
+
   useEffect(() => {
-    scroller.current?.scrollTo({
-      top: scroller.current.scrollHeight,
-      behavior: "smooth",
-    });
+    if (atBottomRef.current) scrollToBottom();
   }, [messages]);
 
   const handleProviderChange = (p: string, m: string) => {
@@ -158,6 +172,8 @@ export default function App() {
       streaming: true,
     };
     setMessages([...working, pendingMsg]);
+    atBottomRef.current = true;
+    setAtBottom(true);
     setBusy(true);
 
     const controller = new AbortController();
@@ -364,20 +380,36 @@ export default function App() {
           </div>
         </header>
 
-        <div ref={scroller} className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
-            <EmptyState onSuggest={handleSubmit} />
-          ) : (
-            <div>
-              {messages.map((m, i) => (
-                <Message
-                  key={i}
-                  message={m}
-                  showRegenerate={i === lastAssistantIndex && !busy}
-                  onRegenerate={() => handleRegenerate(i)}
-                />
-              ))}
-            </div>
+        <div className="flex-1 relative min-h-0">
+          <div
+            ref={scroller}
+            onScroll={handleScroll}
+            className="absolute inset-0 overflow-y-auto"
+          >
+            {messages.length === 0 ? (
+              <EmptyState onSuggest={handleSubmit} />
+            ) : (
+              <div>
+                {messages.map((m, i) => (
+                  <Message
+                    key={i}
+                    message={m}
+                    showRegenerate={i === lastAssistantIndex && !busy}
+                    onRegenerate={() => handleRegenerate(i)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          {!atBottom && messages.length > 0 && (
+            <button
+              onClick={() => scrollToBottom()}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-bg-card border border-border shadow-lg flex items-center justify-center text-ink-muted hover:text-ink hover:bg-bg-soft transition-colors"
+              aria-label="Scroll to latest"
+              title="Scroll to latest"
+            >
+              <ArrowDown size={16} />
+            </button>
           )}
         </div>
 
