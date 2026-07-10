@@ -40,6 +40,25 @@ export function saveTheme(theme: Theme): void {
   }
 }
 
+const ACTIVE_CONV_KEY = "kgent_active_conv";
+
+export function loadActiveConv(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_CONV_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveConv(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(ACTIVE_CONV_KEY, id);
+    else localStorage.removeItem(ACTIVE_CONV_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 const SIDEBAR_KEY = "kgent_sidebar_open";
 
 export function loadSidebarOpen(): boolean {

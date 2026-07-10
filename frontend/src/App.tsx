@@ -25,6 +25,7 @@ import {
   getStoreInfo,
   type Chunk,
   type ChatHistoryMessage,
+  type ConversationDetail,
   type ProviderInfo,
   type StoreInfo,
 } from "./lib/api";
@@ -35,8 +36,31 @@ import {
   saveTheme,
   loadSidebarOpen,
   saveSidebarOpen,
+  loadActiveConv,
+  saveActiveConv,
   type Theme,
 } from "./lib/storage";
+
+function toChatMessages(detail: ConversationDetail): ChatMessage[] {
+  return detail.messages.map((m) => {
+    let context: Chunk[] | undefined;
+    if (m.context_json) {
+      try {
+        context = JSON.parse(m.context_json);
+      } catch {
+        /* ignore parse errors */
+      }
+    }
+    return {
+      role: m.role,
+      content: m.content,
+      context,
+      provider: m.provider ?? undefined,
+      model: m.model ?? undefined,
+      elapsedMs: m.elapsed_ms ?? undefined,
+    };
+  });
+}
 
 export default function App() {
   const [info, setInfo] = useState<StoreInfo | null>(null);
@@ -57,6 +81,7 @@ export default function App() {
   const toastSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const atBottomRef = useRef(true);
+  const restoredConvRef = useRef<string | null>(loadActiveConv());
 
   const pushToast = useCallback((kind: "success" | "error", message: string) => {
     const id = ++toastSeq.current;
@@ -90,6 +115,21 @@ export default function App() {
     getStoreInfo().then(setInfo).catch(() => setInfo(null));
     refreshProviders();
   }, [refreshProviders]);
+
+  useEffect(() => {
+    const stored = restoredConvRef.current;
+    if (!stored) return;
+    getConversation(stored)
+      .then((detail) => {
+        setActiveConvId(detail.id);
+        setMessages(toChatMessages(detail));
+      })
+      .catch(() => saveActiveConv(null));
+  }, []);
+
+  useEffect(() => {
+    saveActiveConv(activeConvId);
+  }, [activeConvId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -281,26 +321,8 @@ export default function App() {
     if (id === activeConvId) return;
     try {
       const detail = await getConversation(id);
-      const loaded: ChatMessage[] = detail.messages.map((m) => {
-        let context: Chunk[] | undefined = undefined;
-        if (m.context_json) {
-          try {
-            context = JSON.parse(m.context_json);
-          } catch {
-            /* ignore parse errors */
-          }
-        }
-        return {
-          role: m.role,
-          content: m.content,
-          context,
-          provider: m.provider ?? undefined,
-          model: m.model ?? undefined,
-          elapsedMs: m.elapsed_ms ?? undefined,
-        };
-      });
       setActiveConvId(id);
-      setMessages(loaded);
+      setMessages(toChatMessages(detail));
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
     }

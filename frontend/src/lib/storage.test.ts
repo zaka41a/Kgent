@@ -6,6 +6,8 @@ import {
   saveSidebarOpen,
   loadSelection,
   saveSelection,
+  loadActiveConv,
+  saveActiveConv,
 } from "./storage";
 
 describe("theme storage", () => {
@@ -44,5 +46,24 @@ describe("provider selection storage", () => {
   it("round-trips a provider selection", () => {
     saveSelection({ provider: "ollama", model: "mistral" });
     expect(loadSelection()).toEqual({ provider: "ollama", model: "mistral" });
+  });
+});
+
+describe("active conversation storage", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("returns null when nothing is stored", () => {
+    expect(loadActiveConv()).toBeNull();
+  });
+
+  it("round-trips an active conversation id", () => {
+    saveActiveConv("conv-123");
+    expect(loadActiveConv()).toBe("conv-123");
+  });
+
+  it("clears the stored id when saving null", () => {
+    saveActiveConv("conv-123");
+    saveActiveConv(null);
+    expect(loadActiveConv()).toBeNull();
   });
 });
