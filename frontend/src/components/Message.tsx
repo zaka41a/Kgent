@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { User, Bot, FileText, Copy, Check, RefreshCw } from "lucide-react";
 import type { Chunk } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -25,12 +26,12 @@ interface Props {
 
 export default function Message({ message, onRegenerate, showRegenerate }: Props) {
   const isUser = message.role === "user";
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    const ok = await copyText(message.content);
+    setCopyState(ok ? "copied" : "failed");
+    setTimeout(() => setCopyState("idle"), 1500);
   };
 
   return (
@@ -66,10 +67,12 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
             <div className="mt-2 flex items-center gap-3 text-xs text-ink-dim">
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1 hover:text-ink-muted transition-colors"
+                className={`flex items-center gap-1 transition-colors ${
+                  copyState === "failed" ? "text-red-400" : "hover:text-ink-muted"
+                }`}
               >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                {copied ? "Copied" : "Copy"}
+                {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
+                {copyState === "copied" ? "Copied" : copyState === "failed" ? "Failed" : "Copy"}
               </button>
               {showRegenerate && onRegenerate && (
                 <button
@@ -99,7 +102,9 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
             <details className="mt-3 text-sm">
               <summary className="cursor-pointer text-ink-muted hover:text-ink select-none flex items-center gap-1.5">
                 <FileText size={13} />
-                <span>{message.context.length} sources</span>
+                <span>
+                  {message.context.length} source{message.context.length === 1 ? "" : "s"}
+                </span>
               </summary>
               <div className="mt-2 space-y-2">
                 {message.context.map((c, i) => (
