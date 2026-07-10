@@ -1,10 +1,24 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { User, Bot, FileText, Copy, Check, RefreshCw } from "lucide-react";
 import type { Chunk } from "../lib/api";
 import { copyText } from "../lib/clipboard";
+
+const REMARK_PLUGINS = [remarkGfm];
+const REHYPE_PLUGINS = [rehypeHighlight];
+
+// Parsing and highlighting markdown is the expensive part of a message. Memoizing
+// it on `content` means that while an answer streams, only the growing message
+// re-parses; every earlier message is skipped instead of re-rendered per token.
+const MarkdownBody = memo(function MarkdownBody({ content }: { content: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+      {content}
+    </ReactMarkdown>
+  );
+});
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -51,12 +65,7 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
             <div className="text-red-400 text-sm">{message.content}</div>
           ) : (
             <>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-              >
-                {message.content}
-              </ReactMarkdown>
+              <MarkdownBody content={message.content} />
               {message.streaming && (
                 <span className="inline-block w-2 h-4 bg-ink/70 ml-0.5 align-middle animate-pulse" />
               )}
