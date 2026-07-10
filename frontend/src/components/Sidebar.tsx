@@ -22,6 +22,7 @@ interface Props {
   onOpenSettings: () => void;
   onOpenIngest: () => void;
   onError: (msg: string) => void;
+  onConversationDeleted?: (id: string) => void;
   onGraphBuilt?: () => void;
   selectedProvider?: string;
   selectedModel?: string;
@@ -36,6 +37,7 @@ export default function Sidebar({
   onOpenSettings,
   onOpenIngest,
   onError,
+  onConversationDeleted,
   onGraphBuilt,
   selectedProvider,
   selectedModel,
@@ -115,6 +117,7 @@ export default function Sidebar({
             onSelect={onSelectConversation}
             refreshKey={conversationsRefresh}
             onError={onError}
+            onDeleted={onConversationDeleted}
           />
         </div>
 

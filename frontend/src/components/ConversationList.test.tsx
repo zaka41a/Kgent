@@ -73,11 +73,31 @@ describe("ConversationList", () => {
     );
 
     await screen.findByText("Drop me");
-    const deleteButtons = screen.getAllByRole("button", { name: /delete/i });
+    const deleteButtons = screen.getAllByRole("button", { name: /delete conversation/i });
     await user.click(deleteButtons[1]);
+
+    // First click asks for confirmation; nothing is deleted yet.
+    expect(mockedDelete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /^confirm$/i }));
 
     await waitFor(() => expect(screen.queryByText("Drop me")).toBeNull());
     expect(mockedDelete).toHaveBeenCalledWith("b");
     expect(screen.getByText("Keep me")).toBeInTheDocument();
+  });
+
+  it("keeps the conversation when the delete is cancelled", async () => {
+    mockedList.mockResolvedValueOnce([conv("a", "Stay here")]);
+
+    const user = userEvent.setup();
+    render(
+      <ConversationList activeId={null} onSelect={() => {}} refreshKey={0} onError={() => {}} />,
+    );
+
+    await screen.findByText("Stay here");
+    await user.click(screen.getByRole("button", { name: /delete conversation/i }));
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(mockedDelete).not.toHaveBeenCalled();
+    expect(screen.getByText("Stay here")).toBeInTheDocument();
   });
 });

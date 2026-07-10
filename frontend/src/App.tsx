@@ -270,6 +270,13 @@ export default function App() {
     setActiveConvId(null);
   };
 
+  const handleConversationDeleted = (id: string) => {
+    if (id === activeConvId) {
+      setActiveConvId(null);
+      setMessages([]);
+    }
+  };
+
   const handleSelectConversation = async (id: string) => {
     if (id === activeConvId) return;
     try {
@@ -331,6 +338,7 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenIngest={() => setIngestOpen(true)}
           onError={(msg) => pushToast("error", msg)}
+          onConversationDeleted={handleConversationDeleted}
           onGraphBuilt={() => {
             getStoreInfo().then(setInfo).catch(() => undefined);
             pushToast("success", "Entity graph rebuilt.");
