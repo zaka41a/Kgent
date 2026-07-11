@@ -8,6 +8,8 @@ import {
   saveSelection,
   loadActiveConv,
   saveActiveConv,
+  loadMapOpen,
+  saveMapOpen,
 } from "./storage";
 
 describe("theme storage", () => {
@@ -65,5 +67,18 @@ describe("active conversation storage", () => {
     saveActiveConv("conv-123");
     saveActiveConv(null);
     expect(loadActiveConv()).toBeNull();
+  });
+});
+
+describe("knowledge map storage", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("defaults to open", () => {
+    expect(loadMapOpen()).toBe(true);
+  });
+
+  it("round-trips the collapsed state", () => {
+    saveMapOpen(false);
+    expect(loadMapOpen()).toBe(false);
   });
 });

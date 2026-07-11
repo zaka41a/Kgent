@@ -76,3 +76,21 @@ export function saveSidebarOpen(open: boolean): void {
     /* ignore */
   }
 }
+
+const MAP_KEY = "kgent_map_open";
+
+export function loadMapOpen(): boolean {
+  try {
+    return localStorage.getItem(MAP_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function saveMapOpen(open: boolean): void {
+  try {
+    localStorage.setItem(MAP_KEY, open ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}

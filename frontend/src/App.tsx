@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   Sun,
@@ -6,6 +6,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowDown,
+  Network,
 } from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
@@ -16,16 +17,20 @@ import ProviderPicker from "./components/ProviderPicker";
 import SettingsModal from "./components/SettingsModal";
 import ToastContainer, { ToastData } from "./components/Toast";
 import IngestModal, { IngestResult } from "./components/IngestModal";
+import KnowledgeMap from "./components/KnowledgeMap";
 
 import {
   askStream,
   createConversation,
   getConversation,
+  getGraph,
   getProviders,
   getStoreInfo,
   type Chunk,
   type ChatHistoryMessage,
   type ConversationDetail,
+  type GraphData,
+  type GraphNode,
   type ProviderInfo,
   type StoreInfo,
 } from "./lib/api";
@@ -38,6 +43,8 @@ import {
   saveSidebarOpen,
   loadActiveConv,
   saveActiveConv,
+  loadMapOpen,
+  saveMapOpen,
   type Theme,
 } from "./lib/storage";
 
@@ -62,6 +69,26 @@ function toChatMessages(detail: ConversationDetail): ChatMessage[] {
   });
 }
 
+// Which graph nodes an answer actually leans on: a node counts as "cited" when
+// its label shows up in the answer text or in one of the retrieved chunks.
+function nodesInText(
+  nodes: GraphNode[],
+  chunks: Chunk[] | undefined,
+  answer: string,
+): string[] {
+  if (!chunks || chunks.length === 0) return [];
+  const haystack = (answer + " " + chunks.map((c) => c.text).join(" ")).toLowerCase();
+  const tokens = new Set(haystack.split(/[^a-z0-9_.]+/).filter(Boolean));
+  const ids: string[] = [];
+  for (const n of nodes) {
+    const label = n.label.toLowerCase();
+    if (label.length < 3) continue;
+    const hit = label.includes(" ") ? haystack.includes(label) : tokens.has(label);
+    if (hit) ids.push(n.id);
+  }
+  return ids;
+}
+
 export default function App() {
   const [info, setInfo] = useState<StoreInfo | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -76,6 +103,8 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
+  const [mapOpen, setMapOpen] = useState<boolean>(loadMapOpen);
+  const [graph, setGraph] = useState<GraphData | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const toastSeq = useRef(0);
@@ -111,10 +140,15 @@ export default function App() {
     }
   }, [pushToast]);
 
+  const refreshGraph = useCallback(() => {
+    getGraph().then(setGraph).catch(() => setGraph(null));
+  }, []);
+
   useEffect(() => {
     getStoreInfo().then(setInfo).catch(() => setInfo(null));
     refreshProviders();
-  }, [refreshProviders]);
+    refreshGraph();
+  }, [refreshProviders, refreshGraph]);
 
   useEffect(() => {
     const stored = restoredConvRef.current;
@@ -144,6 +178,12 @@ export default function App() {
   const toggleSidebar = () =>
     setSidebarOpen((open) => {
       saveSidebarOpen(!open);
+      return !open;
+    });
+
+  const toggleMap = () =>
+    setMapOpen((open) => {
+      saveMapOpen(!open);
       return !open;
     });
 
@@ -339,6 +379,7 @@ export default function App() {
       `Indexed ${result.documents} documents (${result.total_chunks} chunks)`,
     );
     getStoreInfo().then(setInfo).catch(() => undefined);
+    refreshGraph();
     setMessages([]);
     setActiveConvId(null);
   };
@@ -347,6 +388,19 @@ export default function App() {
     (acc, m, i) => (m.role === "assistant" && !m.error ? i : acc),
     -1,
   );
+
+  const hasGraph = !!graph && graph.nodes.length > 0;
+
+  const citedNodes = useMemo(() => {
+    if (!graph || graph.nodes.length === 0) return [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant" && !m.error && m.context && m.context.length) {
+        return nodesInText(graph.nodes, m.context, m.content);
+      }
+    }
+    return [];
+  }, [graph, messages]);
 
   return (
     <div className="h-full flex bg-bg text-ink">
@@ -363,6 +417,7 @@ export default function App() {
           onConversationDeleted={handleConversationDeleted}
           onGraphBuilt={() => {
             getStoreInfo().then(setInfo).catch(() => undefined);
+            refreshGraph();
             pushToast("success", "Entity graph rebuilt.");
           }}
           selectedProvider={provider}
@@ -392,6 +447,16 @@ export default function App() {
               onChange={handleProviderChange}
               onOpenSettings={() => setSettingsOpen(true)}
             />
+            {hasGraph && (
+              <button
+                onClick={toggleMap}
+                className="hidden lg:block p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg-card transition-colors"
+                aria-label={mapOpen ? "Hide knowledge map" : "Show knowledge map"}
+                title={mapOpen ? "Hide knowledge map" : "Show knowledge map"}
+              >
+                <Network size={16} className={mapOpen ? "text-accent" : ""} />
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-bg-card transition-colors"
@@ -450,6 +515,38 @@ export default function App() {
           onStop={handleStop}
         />
       </main>
+
+      {mapOpen && hasGraph && graph && (
+        <aside className="hidden lg:flex w-80 flex-col bg-bg-soft border-l border-border">
+          <div className="px-4 py-3 border-b border-border">
+            <div className="text-[0.65rem] uppercase tracking-wider text-ink-dim font-mono">
+              Knowledge map
+            </div>
+            <div className="text-sm text-ink mt-0.5">
+              {graph.nodes.length} entities
+              {citedNodes.length > 0 && (
+                <span className="text-accent"> · {citedNodes.length} in this answer</span>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 relative min-h-0">
+            <KnowledgeMap
+              nodes={graph.nodes}
+              edges={graph.edges}
+              highlight={citedNodes}
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+          <div className="px-4 py-3 border-t border-border flex gap-4 text-xs text-ink-muted font-mono">
+            <span className="flex items-center gap-1.5">
+              <i className="w-2 h-2 rounded-full bg-ink-dim inline-block" /> entity
+            </span>
+            <span className="flex items-center gap-1.5">
+              <i className="w-2 h-2 rounded-full bg-accent inline-block" /> cited
+            </span>
+          </div>
+        </aside>
+      )}
 
       <SettingsModal
         open={settingsOpen}
