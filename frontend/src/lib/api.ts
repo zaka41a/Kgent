@@ -165,6 +165,31 @@ export async function getGraphStatus(jobId: string): Promise<GraphJob> {
   return res.json();
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  kind: string;
+}
+
+export interface GraphEdge {
+  src: string;
+  dst: string;
+  kind: string;
+  weight: number;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  has_graph: boolean;
+}
+
+export async function getGraph(limit = 300): Promise<GraphData> {
+  const res = await fetch(`/api/graph?limit=${limit}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const res = await fetch(`/api/conversations/${id}`, {
     method: "DELETE",
