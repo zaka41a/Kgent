@@ -95,3 +95,36 @@ def test_providers_endpoint_lists_known_providers(app_client: TestClient):
     body = app_client.get("/api/providers").json()
     names = {p["name"] for p in body["providers"]}
     assert {"ollama", "openai", "anthropic", "groq"}.issubset(names)
+
+
+def test_graph_empty_when_no_graph(app_client: TestClient):
+    body = app_client.get("/api/graph").json()
+    assert body == {"nodes": [], "edges": [], "has_graph": False}
+
+
+def test_graph_returns_nodes_after_ingest(tmp_path: Path):
+    settings = Settings(
+        store_kind="json",
+        store_path=tmp_path / "index.json",
+        db_url=f"sqlite:///{tmp_path / 'chat.db'}",
+        graph_mode="cooccurrence",
+    )
+    client = TestClient(create_app(settings))
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "notes.md").write_text(
+        "Alpha Beta Alpha Beta Alpha Beta Gamma Alpha Beta Gamma",
+        encoding="utf-8",
+    )
+    job_id = client.post(
+        "/api/ingest", json={"path": str(repo), "replace": True}
+    ).json()["job_id"]
+    _wait_for_ingest(client, job_id)
+
+    body = client.get("/api/graph").json()
+    assert body["has_graph"] is True
+    labels = {n["label"] for n in body["nodes"]}
+    assert "Alpha" in labels
+    assert "Beta" in labels
+    assert all({"src", "dst", "weight"} <= e.keys() for e in body["edges"])

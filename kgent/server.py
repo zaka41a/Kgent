@@ -431,6 +431,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown graph job: {job_id}")
         return job
 
+    @app.get("/api/graph")
+    def graph_endpoint(limit: int = 300) -> dict:
+        if state.graph is None:
+            return {"nodes": [], "edges": [], "has_graph": False}
+        return _graph_payload(state.graph, limit)
+
     @app.post("/api/ask")
     def ask_endpoint(
         req: AskRequest,
@@ -572,6 +578,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="frontend")
 
     return app
+
+
+def _graph_payload(graph: KGraph, limit: int) -> dict:
+    """Serialize a graph for the UI, keeping only the highest-degree nodes.
+
+    A large corpus can produce thousands of nodes; the map only needs the most
+    connected ones to stay legible and the payload small.
+    """
+    nodes = list(graph.nodes.values())
+    edges = graph.edges
+    if len(nodes) > limit:
+        degree: dict[str, int] = {}
+        for e in edges:
+            degree[e.src] = degree.get(e.src, 0) + 1
+            degree[e.dst] = degree.get(e.dst, 0) + 1
+        nodes = sorted(nodes, key=lambda n: degree.get(n.id, 0), reverse=True)[:limit]
+        keep = {n.id for n in nodes}
+        edges = [e for e in edges if e.src in keep and e.dst in keep]
+    return {
+        "nodes": [asdict(n) for n in nodes],
+        "edges": [asdict(e) for e in edges],
+        "has_graph": True,
+    }
 
 
 def _sse(payload: dict) -> str:
