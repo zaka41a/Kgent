@@ -157,6 +157,24 @@ function createSim(
       ctx!.stroke();
     });
     ctx!.globalAlpha = 1;
+
+    // Only the cited nodes and the one under the cursor get a label; showing
+    // every hub at once turns a large graph into an unreadable pile of text.
+    let hoverId: string | null = null;
+    if (mouse.active) {
+      let best = Infinity;
+      for (const n of nodes) {
+        const dx = n.x * width - mouse.x * width;
+        const dy = n.y * height - mouse.y * height;
+        const d = dx * dx + dy * dy;
+        if (d < best) {
+          best = d;
+          hoverId = n.id;
+        }
+      }
+      if (best > 24 * 24) hoverId = null;
+    }
+
     nodes.forEach((n) => {
       const x = n.x * width;
       const y = n.y * height;
@@ -177,9 +195,9 @@ function createSim(
       ctx!.lineWidth = 1.4;
       ctx!.strokeStyle = pal.bg;
       ctx!.stroke();
-      if (on || n.deg > 4) {
-        ctx!.font = `${on ? "600 " : "400 "}11px ui-monospace, Menlo, monospace`;
-        ctx!.fillStyle = on ? pal.ink : pal.muted;
+      if (on || n.id === hoverId) {
+        ctx!.font = `${on ? "600 " : "500 "}11px ui-monospace, Menlo, monospace`;
+        ctx!.fillStyle = pal.ink;
         ctx!.textAlign = "center";
         ctx!.fillText(n.label, x, y - r - 6);
       }

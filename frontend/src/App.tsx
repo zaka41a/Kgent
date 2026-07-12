@@ -89,6 +89,25 @@ function nodesInText(
   return ids;
 }
 
+const KIND_LABELS: Record<string, string> = {
+  function: "fn",
+  symbol: "sym",
+  file: "file",
+  concept: "idea",
+  technology: "tech",
+  organization: "org",
+  location: "place",
+  product: "product",
+  person: "person",
+  event: "event",
+  document: "doc",
+  term: "term",
+};
+
+function shortKind(kind: string): string {
+  return KIND_LABELS[kind] ?? kind.slice(0, 6);
+}
+
 export default function App() {
   const [info, setInfo] = useState<StoreInfo | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -105,6 +124,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(loadSidebarOpen);
   const [mapOpen, setMapOpen] = useState<boolean>(loadMapOpen);
   const [graph, setGraph] = useState<GraphData | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const toastSeq = useRef(0);
@@ -402,6 +422,12 @@ export default function App() {
     return [];
   }, [graph, messages]);
 
+  const citedNodeObjs = useMemo(() => {
+    if (!graph) return [] as GraphNode[];
+    const set = new Set(citedNodes);
+    return graph.nodes.filter((n) => set.has(n.id));
+  }, [graph, citedNodes]);
+
   return (
     <div className="h-full flex bg-bg text-ink">
       {sidebarOpen && (
@@ -519,24 +545,53 @@ export default function App() {
       {mapOpen && hasGraph && graph && (
         <aside className="hidden lg:flex w-80 flex-col bg-bg-soft border-l border-border">
           <div className="px-4 py-3 border-b border-border">
-            <div className="text-[0.65rem] uppercase tracking-wider text-ink-dim font-mono">
+            <div className="text-[0.62rem] uppercase tracking-[0.14em] text-ink-dim font-mono">
               Knowledge map
             </div>
-            <div className="text-sm text-ink mt-0.5">
+            <h3 className="text-sm font-medium text-ink mt-1">
+              {citedNodes.length > 0 ? "Entities in this answer" : "Full knowledge graph"}
+            </h3>
+            <div className="text-xs text-ink-dim font-mono mt-0.5">
               {graph.nodes.length} entities
               {citedNodes.length > 0 && (
-                <span className="text-accent"> · {citedNodes.length} in this answer</span>
+                <span className="text-accent"> · {citedNodes.length} cited</span>
               )}
             </div>
           </div>
+
           <div className="flex-1 relative min-h-0">
             <KnowledgeMap
               nodes={graph.nodes}
               edges={graph.edges}
-              highlight={citedNodes}
+              highlight={hoveredNode ? [hoveredNode] : citedNodes}
               className="absolute inset-0 w-full h-full"
             />
           </div>
+
+          {citedNodeObjs.length > 0 && (
+            <div className="border-t border-border px-3 py-3 max-h-56 overflow-y-auto">
+              <div className="text-[0.62rem] uppercase tracking-[0.14em] text-ink-dim font-mono mb-2 px-1">
+                Cited nodes
+              </div>
+              <div className="space-y-0.5">
+                {citedNodeObjs.map((n) => (
+                  <button
+                    key={n.id}
+                    onMouseEnter={() => setHoveredNode(n.id)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-left text-sm font-mono text-ink-muted hover:bg-bg-card hover:text-ink transition-colors"
+                  >
+                    <i className="w-2 h-2 rounded-full bg-accent inline-block flex-none" />
+                    <span className="truncate">{n.label}</span>
+                    <span className="ml-auto text-[0.6rem] uppercase tracking-wider text-ink-dim flex-none">
+                      {shortKind(n.kind)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="px-4 py-3 border-t border-border flex gap-4 text-xs text-ink-muted font-mono">
             <span className="flex items-center gap-1.5">
               <i className="w-2 h-2 rounded-full bg-ink-dim inline-block" /> entity
