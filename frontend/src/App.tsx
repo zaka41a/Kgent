@@ -69,24 +69,38 @@ function toChatMessages(detail: ConversationDetail): ChatMessage[] {
   });
 }
 
-// Which graph nodes an answer actually leans on: a node counts as "cited" when
-// its label shows up in the answer text or in one of the retrieved chunks.
+// Cap so the map and the list stay legible even when an answer touches many
+// entities; the graph should read at a glance, not become a wall of labels.
+const CITED_LIMIT = 12;
+
+// Which graph nodes an answer actually leans on: score each node by how many of
+// the retrieved chunks mention its label (with a bonus when it appears in the
+// answer itself), then keep the strongest few.
 function nodesInText(
   nodes: GraphNode[],
   chunks: Chunk[] | undefined,
   answer: string,
 ): string[] {
   if (!chunks || chunks.length === 0) return [];
-  const haystack = (answer + " " + chunks.map((c) => c.text).join(" ")).toLowerCase();
-  const tokens = new Set(haystack.split(/[^a-z0-9_.]+/).filter(Boolean));
-  const ids: string[] = [];
+  const answerL = answer.toLowerCase();
+  const lowerTexts = chunks.map((c) => c.text.toLowerCase());
+  const tokenSets = lowerTexts.map(
+    (t) => new Set(t.split(/[^a-z0-9_.]+/).filter(Boolean)),
+  );
+  const scored: { id: string; score: number }[] = [];
   for (const n of nodes) {
     const label = n.label.toLowerCase();
     if (label.length < 3) continue;
-    const hit = label.includes(" ") ? haystack.includes(label) : tokens.has(label);
-    if (hit) ids.push(n.id);
+    let score = 0;
+    for (let i = 0; i < tokenSets.length; i++) {
+      const hit = label.includes(" ") ? lowerTexts[i].includes(label) : tokenSets[i].has(label);
+      if (hit) score++;
+    }
+    if (answerL.includes(label)) score += 2;
+    if (score > 0) scored.push({ id: n.id, score });
   }
-  return ids;
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, CITED_LIMIT).map((s) => s.id);
 }
 
 const KIND_LABELS: Record<string, string> = {

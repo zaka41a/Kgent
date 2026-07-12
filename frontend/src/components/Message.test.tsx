@@ -63,7 +63,7 @@ describe("Message", () => {
       />,
     );
     expect(screen.getByText(/1 source\b/i)).toBeInTheDocument();
-    expect(screen.getByText(/graph\.py#0/)).toBeInTheDocument();
+    expect(screen.getByText(/graph\.py/)).toBeInTheDocument();
     expect(screen.getByText(/snippet text/)).toBeInTheDocument();
   });
 

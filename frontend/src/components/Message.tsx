@@ -52,6 +52,14 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
   };
 
   const sources = message.context?.length ?? 0;
+  const sourceFiles: [string, number][] = message.context
+    ? Array.from(
+        message.context.reduce(
+          (m, c) => m.set(c.doc_path, (m.get(c.doc_path) ?? 0) + 1),
+          new Map<string, number>(),
+        ),
+      )
+    : [];
 
   return (
     <div className={`py-6 ${isUser ? "" : "bg-bg-soft/40"} animate-fade-in`}>
@@ -128,16 +136,17 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
           {sources > 0 && message.context && (
             <div className="mt-3">
               <div className="flex flex-wrap gap-2">
-                {message.context.map((c, i) => {
-                  const name = c.doc_path.split("/").pop() || c.doc_path;
+                {sourceFiles.map(([path, n]) => {
+                  const name = path.split("/").pop() || path;
                   return (
                     <span
-                      key={i}
-                      title={`${c.doc_path}#${c.index}`}
+                      key={path}
+                      title={path}
                       className="inline-flex items-center gap-1.5 font-mono text-[0.72rem] text-ink-muted border border-border rounded-full px-2.5 py-1 bg-bg-card"
                     >
                       <i className="w-1.5 h-1.5 rounded-full bg-accent inline-block flex-none" />
-                      {name}#{c.index}
+                      {name}
+                      {n > 1 && <span className="text-ink-dim">×{n}</span>}
                     </span>
                   );
                 })}

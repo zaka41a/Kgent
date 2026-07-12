@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -573,6 +573,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not state.chats.delete_conversation(conv_id):
             raise HTTPException(status_code=404, detail="conversation not found")
         return {"status": "deleted"}
+
+    def _serve(filename: str) -> FileResponse:
+        page = WEB_DIR / filename
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="frontend not built")
+        return FileResponse(page)
+
+    @app.get("/")
+    def landing() -> FileResponse:
+        # The root is the constellation landing page; the chat app lives at /app.
+        page = WEB_DIR / "home.html"
+        return _serve("home.html" if page.exists() else "index.html")
+
+    @app.get("/home")
+    def home_page() -> FileResponse:
+        return landing()
+
+    @app.get("/app")
+    def workspace() -> FileResponse:
+        return _serve("index.html")
 
     if WEB_DIR.exists():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="frontend")
