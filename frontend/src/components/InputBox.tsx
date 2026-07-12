@@ -29,7 +29,7 @@ export default function InputBox({ onSubmit, disabled, busy, onStop }: Props) {
   return (
     <div className="border-t border-border bg-bg/95 backdrop-blur">
       <div className="max-w-3xl mx-auto px-4 py-4">
-        <div className="relative flex items-end bg-bg-card border border-border rounded-2xl shadow-lg focus-within:border-ink-muted transition-colors">
+        <div className="relative flex items-end bg-bg-soft border border-border rounded-2xl shadow-lg focus-within:border-accent transition-colors">
           <textarea
             ref={ref}
             value={value}
@@ -58,7 +58,7 @@ export default function InputBox({ onSubmit, disabled, busy, onStop }: Props) {
             <button
               onClick={submit}
               disabled={disabled || !value.trim()}
-              className="m-2 w-8 h-8 rounded-full bg-ink text-bg flex items-center justify-center disabled:bg-bg-card disabled:text-ink-dim transition-colors hover:bg-ink/90"
+              className="m-2 w-8 h-8 rounded-full bg-accent text-[#06241c] flex items-center justify-center disabled:bg-bg-card disabled:text-ink-dim transition-colors hover:bg-accent-hover"
               aria-label="Send"
             >
               <ArrowUp size={16} />
