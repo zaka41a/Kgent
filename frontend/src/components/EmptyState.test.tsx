@@ -6,7 +6,7 @@ import EmptyState from "./EmptyState";
 describe("EmptyState", () => {
   it("renders the suggestion prompts", () => {
     render(<EmptyState onSuggest={() => {}} />);
-    expect(screen.getByText(/how can i help/i)).toBeInTheDocument();
+    expect(screen.getByText(/navigate what kgent has read/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /trace the path of a single user request/i }),
     ).toBeInTheDocument();

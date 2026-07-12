@@ -1,3 +1,5 @@
+import Logo from "./Logo";
+
 interface Props {
   onSuggest: (prompt: string) => void;
 }
@@ -12,10 +14,15 @@ const SUGGESTIONS = [
 export default function EmptyState({ onSuggest }: Props) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
-      <img src="/logo.svg" alt="kgent" className="w-14 h-14 mb-5" />
-      <h1 className="text-2xl font-semibold mb-2">How can I help?</h1>
+      <Logo className="w-12 h-12 text-accent mb-5" />
+      <div className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ink-dim mb-3">
+        Knowledge agent · runs locally
+      </div>
+      <h1 className="text-3xl font-semibold tracking-tight mb-2">
+        Navigate what kgent has read.
+      </h1>
       <p className="text-ink-muted mb-8 max-w-md">
-        Ask anything about the documentation indexed by <span className="text-accent">k</span>gent.
+        Every answer is grounded in real passages, and every citation is a node you can see on the map.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
@@ -23,9 +30,10 @@ export default function EmptyState({ onSuggest }: Props) {
           <button
             key={s}
             onClick={() => onSuggest(s)}
-            className="text-left text-sm px-4 py-3 rounded-xl border border-border bg-bg-soft hover:bg-bg-card hover:border-ink-dim transition-colors"
+            className="group flex items-start gap-2.5 text-left text-sm px-4 py-3 rounded-xl border border-border bg-bg-soft hover:bg-bg-card hover:border-accent/50 transition-colors"
           >
-            {s}
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-ink-dim group-hover:bg-accent transition-colors flex-none" />
+            <span>{s}</span>
           </button>
         ))}
       </div>
