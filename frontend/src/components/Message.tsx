@@ -2,9 +2,10 @@ import { useState, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { User, Bot, FileText, Copy, Check, RefreshCw } from "lucide-react";
+import { User, FileText, Copy, Check, RefreshCw } from "lucide-react";
 import type { Chunk } from "../lib/api";
 import { copyText } from "../lib/clipboard";
+import Logo from "./Logo";
 
 const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeHighlight];
@@ -38,6 +39,8 @@ interface Props {
   showRegenerate?: boolean;
 }
 
+const META = "font-mono text-[0.62rem] uppercase tracking-[0.12em] text-ink-dim";
+
 export default function Message({ message, onRegenerate, showRegenerate }: Props) {
   const isUser = message.role === "user";
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -48,32 +51,47 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
     setTimeout(() => setCopyState("idle"), 1500);
   };
 
+  const sources = message.context?.length ?? 0;
+
   return (
     <div className={`py-6 ${isUser ? "" : "bg-bg-soft/40"} animate-fade-in`}>
       <div className="max-w-3xl mx-auto px-4 flex gap-4">
-        <div className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center bg-bg-card border border-border">
-          {isUser ? <User size={16} /> : <Bot size={16} className="text-accent" />}
+        <div
+          className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-bg-card border ${
+            isUser ? "border-border text-ink-muted" : "border-accent/40 text-accent"
+          }`}
+        >
+          {isUser ? <User size={15} /> : <Logo className="w-4 h-4" />}
         </div>
-        <div className="flex-1 min-w-0 prose-chat">
-          {message.pending && !message.content ? (
-            <div className="dot-pulse pt-2">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          ) : message.error ? (
-            <div className="text-red-400 text-sm">{message.content}</div>
-          ) : (
-            <>
-              <MarkdownBody content={message.content} />
-              {message.streaming && (
-                <span className="inline-block w-2 h-4 bg-ink/70 ml-0.5 align-middle animate-pulse" />
-              )}
-            </>
-          )}
+
+        <div className="flex-1 min-w-0">
+          <div className={`${META} mb-1.5`}>
+            {isUser
+              ? "You"
+              : `kgent${sources > 0 ? ` · grounded in ${sources} passage${sources === 1 ? "" : "s"}` : ""}`}
+          </div>
+
+          <div className="prose-chat">
+            {message.pending && !message.content ? (
+              <div className="dot-pulse pt-1">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            ) : message.error ? (
+              <div className="text-red-400 text-sm">{message.content}</div>
+            ) : (
+              <>
+                <MarkdownBody content={message.content} />
+                {message.streaming && (
+                  <span className="inline-block w-2 h-4 bg-ink/70 ml-0.5 align-middle animate-pulse" />
+                )}
+              </>
+            )}
+          </div>
 
           {!isUser && !message.pending && !message.streaming && message.content && !message.error && (
-            <div className="mt-2 flex items-center gap-3 text-xs text-ink-dim">
+            <div className="mt-2.5 flex items-center gap-4 font-mono text-[0.7rem] text-ink-dim">
               <button
                 onClick={handleCopy}
                 className={`flex items-center gap-1 transition-colors ${
@@ -92,7 +110,7 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
                   Regenerate
                 </button>
               )}
-              {(message.provider || message.elapsedMs) && (
+              {(message.provider || message.elapsedMs !== undefined) && (
                 <span className="ml-auto">
                   {message.provider && message.model && (
                     <>
@@ -100,38 +118,53 @@ export default function Message({ message, onRegenerate, showRegenerate }: Props
                     </>
                   )}
                   {message.elapsedMs !== undefined && (
-                    <> • {(message.elapsedMs / 1000).toFixed(1)}s</>
+                    <> · {(message.elapsedMs / 1000).toFixed(1)}s</>
                   )}
                 </span>
               )}
             </div>
           )}
 
-          {message.context && message.context.length > 0 && (
-            <details className="mt-3 text-sm">
-              <summary className="cursor-pointer text-ink-muted hover:text-ink select-none flex items-center gap-1.5">
-                <FileText size={13} />
-                <span>
-                  {message.context.length} source{message.context.length === 1 ? "" : "s"}
-                </span>
-              </summary>
-              <div className="mt-2 space-y-2">
-                {message.context.map((c, i) => (
-                  <div
-                    key={i}
-                    className="bg-bg-card border border-border rounded-md p-3 text-xs"
-                  >
-                    <div className="text-accent font-mono mb-1">
-                      {c.doc_path}#{c.index}
-                    </div>
-                    <div className="text-ink-muted whitespace-pre-wrap line-clamp-6">
-                      {c.text.slice(0, 600)}
-                      {c.text.length > 600 ? "..." : ""}
-                    </div>
-                  </div>
-                ))}
+          {sources > 0 && message.context && (
+            <div className="mt-3">
+              <div className="flex flex-wrap gap-2">
+                {message.context.map((c, i) => {
+                  const name = c.doc_path.split("/").pop() || c.doc_path;
+                  return (
+                    <span
+                      key={i}
+                      title={`${c.doc_path}#${c.index}`}
+                      className="inline-flex items-center gap-1.5 font-mono text-[0.72rem] text-ink-muted border border-border rounded-full px-2.5 py-1 bg-bg-card"
+                    >
+                      <i className="w-1.5 h-1.5 rounded-full bg-accent inline-block flex-none" />
+                      {name}#{c.index}
+                    </span>
+                  );
+                })}
               </div>
-            </details>
+
+              <details className="mt-2">
+                <summary className="cursor-pointer select-none flex items-center gap-1.5 font-mono text-xs text-ink-dim hover:text-ink-muted">
+                  <FileText size={12} />
+                  <span>
+                    {sources} source{sources === 1 ? "" : "s"}
+                  </span>
+                </summary>
+                <div className="mt-2 space-y-2">
+                  {message.context.map((c, i) => (
+                    <div
+                      key={i}
+                      className="bg-bg-card border border-border rounded-lg p-3 text-xs"
+                    >
+                      <div className="text-ink-muted whitespace-pre-wrap line-clamp-6">
+                        {c.text.slice(0, 600)}
+                        {c.text.length > 600 ? "..." : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </div>
           )}
         </div>
       </div>
