@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getGraphStatus, startGraphBuild, type StoreInfo } from "../lib/api";
 import ConversationList from "./ConversationList";
+import Logo from "./Logo";
 
 interface Props {
   info: StoreInfo | null;
@@ -88,8 +89,11 @@ export default function Sidebar({
   return (
     <aside className="hidden md:flex md:w-72 flex-col bg-bg-soft border-r border-border">
       <div className="p-3 border-b border-border space-y-2">
-        <div className="flex items-center px-2 pt-1 pb-2">
-          <img src="/logo.svg" alt="kgent" className="h-14" />
+        <div className="flex items-center gap-2.5 px-2 pt-1 pb-2">
+          <Logo className="w-7 h-7 text-accent" />
+          <span className="font-mono text-lg font-semibold tracking-tight text-ink">
+            kgent
+          </span>
         </div>
         <button
           onClick={onNewChat}
