@@ -26,6 +26,21 @@ def test_jsonstore_query_ranks_by_term_frequency(tmp_path: Path):
     assert {h.doc_path for h in hits} == {"a.md", "b.md"}
 
 
+def test_jsonstore_query_bm25_prefers_rarer_terms(tmp_path: Path):
+    store = JsonStore(tmp_path / "index.json")
+    store.add([
+        Chunk(doc_path="common.md", kind="markdown", index=0,
+              text="report report report report status"),
+        Chunk(doc_path="rare.md", kind="markdown", index=0, text="report unicorn"),
+        Chunk(doc_path="f1.md", kind="markdown", index=0, text="report note"),
+        Chunk(doc_path="f2.md", kind="markdown", index=0, text="report memo"),
+    ])
+    # "report" is common (df=4) so it carries little weight; "unicorn" is rare
+    # (df=1). BM25 ranks the doc with the rare term first, unlike raw counting.
+    hits = store.query("report unicorn", k=1)
+    assert hits[0].doc_path == "rare.md"
+
+
 def test_jsonstore_query_returns_empty_on_no_match(tmp_path: Path):
     store = JsonStore(tmp_path / "index.json")
     store.add([Chunk(doc_path="a.md", kind="markdown", index=0, text="hello")])
