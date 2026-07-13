@@ -26,7 +26,7 @@ from .graph_store import load_graph, save_graph
 from .ingest import Chunk, ingest_path
 from .keystore import merge_request_keys
 from .logging_config import configure_logging, get_logger
-from .retriever import retrieve_with_graph
+from .retriever import format_graph_context, retrieve_with_graph
 from .settings import Settings, get_settings
 from .store import get_store
 
@@ -455,9 +455,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         question = _augment_question_with_history(req.question, req.history)
         chunks: list[Chunk] = retrieve_with_graph(state.store, question, state.graph, k=req.k)
+        graph_context = format_graph_context(state.graph, chunks)
         started = time.perf_counter()
         try:
-            text = answer(client, question, chunks)
+            text = answer(client, question, chunks, graph_context=graph_context)
         except Exception as exc:
             log.exception("LLM backend error (provider=%s model=%s)", client.name, client.model)
             payload = _llm_error_payload(exc, client.name, client.model)
@@ -505,6 +506,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         question = _augment_question_with_history(req.question, req.history)
         chunks: list[Chunk] = retrieve_with_graph(state.store, question, state.graph, k=req.k)
+        graph_context = format_graph_context(state.graph, chunks)
 
         def event_gen():
             yield _sse({
@@ -516,7 +518,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             collected: list[str] = []
             started = time.perf_counter()
             try:
-                for token in answer_stream(client, question, chunks):
+                for token in answer_stream(client, question, chunks, graph_context=graph_context):
                     collected.append(token)
                     yield _sse({"type": "delta", "content": token})
             except Exception as exc:

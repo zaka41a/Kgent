@@ -1,8 +1,13 @@
 from pathlib import Path
 
-from kgent.graph import build_cooccurrence_graph
+from kgent.graph import Edge, KGraph, Node, build_cooccurrence_graph
 from kgent.ingest import Chunk
-from kgent.retriever import format_context, retrieve, retrieve_with_graph
+from kgent.retriever import (
+    format_context,
+    format_graph_context,
+    retrieve,
+    retrieve_with_graph,
+)
 from kgent.store import JsonStore
 
 
@@ -65,3 +70,37 @@ def test_format_context_includes_path_header():
     out = format_context(chunks)
     assert "[readme.md#0]" in out
     assert "hello" in out
+
+
+def test_format_graph_context_lists_entity_relations():
+    g = KGraph()
+    g.add_node(Node(id="Marie Curie", label="Marie Curie", kind="person"))
+    g.add_node(Node(id="Radium", label="Radium", kind="concept"))
+    g.add_edge(Edge(src="Marie Curie", dst="Radium", kind="discovered"))
+    chunks = [
+        Chunk(doc_path="bio.md", kind="markdown", index=0,
+              text="Marie Curie discovered Radium in 1898."),
+    ]
+    out = format_graph_context(g, chunks)
+    assert "Marie Curie discovered Radium" in out
+
+
+def test_format_graph_context_empty_for_cooccurrence():
+    g = KGraph()
+    g.add_node(Node(id="Alpha", label="Alpha"))
+    g.add_node(Node(id="Beta", label="Beta"))
+    g.add_edge(Edge(src="Alpha", dst="Beta", kind="co_occurs"))
+    chunks = [
+        Chunk(doc_path="x.md", kind="markdown", index=0,
+              text="Alpha and Beta appear together."),
+    ]
+    assert format_graph_context(g, chunks) == ""
+
+
+def test_format_graph_context_empty_when_no_entities_mentioned():
+    g = KGraph()
+    g.add_node(Node(id="Zeta", label="Zeta", kind="concept"))
+    g.add_node(Node(id="Theta", label="Theta", kind="concept"))
+    g.add_edge(Edge(src="Zeta", dst="Theta", kind="relates_to"))
+    chunks = [Chunk(doc_path="x.md", kind="markdown", index=0, text="nothing relevant here")]
+    assert format_graph_context(g, chunks) == ""

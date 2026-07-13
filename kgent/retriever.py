@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from .graph import KGraph
 from .ingest import Chunk
 from .store import VectorStore
@@ -70,3 +72,58 @@ def format_context(chunks: list[Chunk]) -> str:
         header = f"[{c.doc_path}#{c.index}]"
         parts.append(f"{header}\n{c.text.strip()}")
     return "\n\n".join(parts)
+
+
+def format_graph_context(
+    graph: KGraph | None,
+    chunks: list[Chunk],
+    max_entities: int = 15,
+    max_relations: int = 20,
+) -> str:
+    """Summarize the typed relations among entities that the sources mention.
+
+    This is the "graph" in GraphRAG: instead of only handing the model raw
+    chunks, we give it the explicit relationships (from the entity graph)
+    between the entities that actually appear in those chunks, so it can connect
+    facts that are spread across several snippets. Co-occurrence graphs carry no
+    real relations, so they produce no context and this returns "".
+    """
+    if graph is None or not graph.nodes or not chunks:
+        return ""
+
+    text = " ".join(c.text for c in chunks).lower()
+    tokens = set(re.findall(r"[a-z0-9_]+", text))
+    mentioned = [
+        node
+        for node in graph.nodes.values()
+        if len(node.label) >= 3
+        and (node.label.lower() in text if " " in node.label else node.label.lower() in tokens)
+    ]
+    if not mentioned:
+        return ""
+
+    degree: dict[str, int] = {}
+    for e in graph.edges:
+        degree[e.src] = degree.get(e.src, 0) + 1
+        degree[e.dst] = degree.get(e.dst, 0) + 1
+    mentioned.sort(key=lambda n: degree.get(n.id, 0), reverse=True)
+    keep = {n.id for n in mentioned[:max_entities]}
+    label_by_id = {n.id: n.label for n in graph.nodes.values()}
+
+    seen: set[tuple[str, str, str]] = set()
+    lines: list[str] = []
+    for e in graph.edges:
+        if e.kind == "co_occurs" or e.src not in keep or e.dst not in keep:
+            continue
+        key = (e.src, e.kind, e.dst)
+        if key in seen:
+            continue
+        seen.add(key)
+        rel = e.kind.replace("_", " ")
+        lines.append(f"- {label_by_id.get(e.src, e.src)} {rel} {label_by_id.get(e.dst, e.dst)}")
+        if len(lines) >= max_relations:
+            break
+
+    if not lines:
+        return ""
+    return "Known relationships among entities in the sources:\n" + "\n".join(lines)

@@ -14,7 +14,9 @@ from .retriever import format_context
 SYSTEM_PROMPT = (
     "You are a documentation assistant. You answer questions strictly based on the "
     "context snippets below. If the context does not contain the answer, say so. "
-    "Always cite the document path of the snippet you used."
+    "Always cite the document path of the snippet you used. When a list of known "
+    "relationships between entities is provided, use it to connect facts that span "
+    "multiple snippets."
 )
 
 
@@ -278,16 +280,33 @@ def build_default_client() -> LLMClient:
     return build_client("ollama")
 
 
-def answer(client: LLMClient, question: str, chunks: list[Chunk]) -> str:
+def _build_user(question: str, chunks: list[Chunk], graph_context: str) -> str:
+    parts: list[str] = []
+    if graph_context:
+        parts.append(graph_context)
+    parts.append(f"Context:\n{format_context(chunks)}")
+    parts.append(f"Question: {question}\nAnswer:")
+    return "\n\n".join(parts)
+
+
+def answer(
+    client: LLMClient,
+    question: str,
+    chunks: list[Chunk],
+    graph_context: str = "",
+) -> str:
     if not chunks:
         return "No documentation has been ingested yet. Run `kgent ingest <path>` first."
-    user = f"Context:\n{format_context(chunks)}\n\nQuestion: {question}\nAnswer:"
-    return client.complete(SYSTEM_PROMPT, user)
+    return client.complete(SYSTEM_PROMPT, _build_user(question, chunks, graph_context))
 
 
-def answer_stream(client: LLMClient, question: str, chunks: list[Chunk]) -> Iterator[str]:
+def answer_stream(
+    client: LLMClient,
+    question: str,
+    chunks: list[Chunk],
+    graph_context: str = "",
+) -> Iterator[str]:
     if not chunks:
         yield "No documentation has been ingested yet. Run `kgent ingest <path>` first."
         return
-    user = f"Context:\n{format_context(chunks)}\n\nQuestion: {question}\nAnswer:"
-    yield from client.stream(SYSTEM_PROMPT, user)
+    yield from client.stream(SYSTEM_PROMPT, _build_user(question, chunks, graph_context))
