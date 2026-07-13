@@ -23,6 +23,73 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
+class Bm25Index:
+    """Okapi BM25 over a fixed list of chunks, rebuilt when the corpus changes."""
+
+    def __init__(self) -> None:
+        self._chunks: list[Chunk] = []
+        self._tfs: list[Counter[str]] = []
+        self._lengths: list[int] = []
+        self._df: dict[str, int] = {}
+        self._avgdl: float = 0.0
+
+    def build(self, chunks: list[Chunk]) -> None:
+        self._chunks = chunks
+        self._tfs = []
+        self._lengths = []
+        self._df = {}
+        for c in chunks:
+            tf = Counter(_tokenize(c.text))
+            self._tfs.append(tf)
+            self._lengths.append(sum(tf.values()))
+            for term in tf:
+                self._df[term] = self._df.get(term, 0) + 1
+        self._avgdl = (sum(self._lengths) / len(self._lengths)) if self._lengths else 0.0
+
+    def query(self, text: str, k: int = 5) -> list[Chunk]:
+        qterms = set(_tokenize(text))
+        n = len(self._chunks)
+        if not qterms or n == 0:
+            return []
+        idf = {
+            t: math.log(1 + (n - self._df.get(t, 0) + 0.5) / (self._df.get(t, 0) + 0.5))
+            for t in qterms
+        }
+        scored: list[tuple[float, Chunk]] = []
+        for i, c in enumerate(self._chunks):
+            tf = self._tfs[i]
+            dl = self._lengths[i]
+            score = 0.0
+            for t in qterms:
+                f = tf.get(t, 0)
+                if not f:
+                    continue
+                norm = 1 - _BM25_B + _BM25_B * (dl / self._avgdl if self._avgdl else 0.0)
+                score += idf[t] * (f * (_BM25_K1 + 1)) / (f + _BM25_K1 * norm)
+            if score > 0:
+                scored.append((score * _path_boost(c.doc_path), c))
+        scored.sort(key=lambda row: row[0], reverse=True)
+        return [c for _, c in scored[:k]]
+
+
+def rrf_fuse(rankings: list[list[Chunk]], k: int, c: int = 60) -> list[Chunk]:
+    """Reciprocal Rank Fusion: merge several ranked lists into one top-k list.
+
+    A chunk that ranks well in more than one list (e.g. both the lexical and the
+    semantic ranking) rises to the top, which is more robust than either signal
+    alone. `c` damps the contribution of low ranks (the standard default is 60).
+    """
+    scores: dict[tuple[str, int], float] = {}
+    by_key: dict[tuple[str, int], Chunk] = {}
+    for ranking in rankings:
+        for pos, chunk in enumerate(ranking):
+            key = (chunk.doc_path, chunk.index)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (c + pos + 1)
+            by_key.setdefault(key, chunk)
+    ordered = sorted(scores, key=lambda key: scores[key], reverse=True)
+    return [by_key[key] for key in ordered[:k]]
+
+
 class VectorStore(Protocol):
     def add(
         self,
@@ -64,8 +131,9 @@ class JsonStore(_MetaMixin):
             data = json.loads(self.path.read_text(encoding="utf-8"))
             self._chunks = [Chunk(**row) for row in data]
         self._meta_path = self.path.parent / "meta.json"
-        # Cached BM25 statistics, rebuilt lazily and invalidated on write.
-        self._index: tuple[list[Counter[str]], list[int], dict[str, int], float] | None = None
+        # BM25 index, rebuilt lazily and invalidated on write.
+        self._bm25 = Bm25Index()
+        self._bm25_dirty = True
 
     def add(
         self,
@@ -73,14 +141,14 @@ class JsonStore(_MetaMixin):
         on_progress: Callable[[int, int], None] | None = None,
     ) -> None:
         self._chunks.extend(chunks)
-        self._index = None
+        self._bm25_dirty = True
         self._persist()
         if on_progress is not None and chunks:
             on_progress(len(chunks), len(chunks))
 
     def reset(self) -> None:
         self._chunks = []
-        self._index = None
+        self._bm25_dirty = True
         self._persist()
 
     def _persist(self) -> None:
@@ -89,50 +157,13 @@ class JsonStore(_MetaMixin):
             encoding="utf-8",
         )
 
-    def _ensure_index(
-        self,
-    ) -> tuple[list[Counter[str]], list[int], dict[str, int], float]:
-        if self._index is None:
-            tfs: list[Counter[str]] = []
-            lengths: list[int] = []
-            df: dict[str, int] = {}
-            for c in self._chunks:
-                tf = Counter(_tokenize(c.text))
-                tfs.append(tf)
-                lengths.append(sum(tf.values()))
-                for term in tf:
-                    df[term] = df.get(term, 0) + 1
-            avgdl = (sum(lengths) / len(lengths)) if lengths else 0.0
-            self._index = (tfs, lengths, df, avgdl)
-        return self._index
-
     def query(self, text: str, k: int = 5) -> list[Chunk]:
-        qterms = set(_tokenize(text))
-        if not qterms:
+        if not _tokenize(text):
             return self._chunks[:k]
-        n = len(self._chunks)
-        if n == 0:
-            return []
-        tfs, lengths, df, avgdl = self._ensure_index()
-        idf = {
-            t: math.log(1 + (n - df.get(t, 0) + 0.5) / (df.get(t, 0) + 0.5))
-            for t in qterms
-        }
-        scored: list[tuple[float, Chunk]] = []
-        for i, c in enumerate(self._chunks):
-            tf = tfs[i]
-            dl = lengths[i]
-            score = 0.0
-            for t in qterms:
-                f = tf.get(t, 0)
-                if not f:
-                    continue
-                norm = 1 - _BM25_B + _BM25_B * (dl / avgdl if avgdl else 0.0)
-                score += idf[t] * (f * (_BM25_K1 + 1)) / (f + _BM25_K1 * norm)
-            if score > 0:
-                scored.append((score * _path_boost(c.doc_path), c))
-        scored.sort(key=lambda row: row[0], reverse=True)
-        return [c for _, c in scored[:k]]
+        if self._bm25_dirty:
+            self._bm25.build(self._chunks)
+            self._bm25_dirty = False
+        return self._bm25.query(text, k)
 
     def count(self) -> int:
         return len(self._chunks)

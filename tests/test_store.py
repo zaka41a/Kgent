@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from kgent.ingest import Chunk
-from kgent.store import JsonStore, get_store
+from kgent.store import JsonStore, get_store, rrf_fuse
 
 
 def test_jsonstore_roundtrip(tmp_path: Path):
@@ -45,6 +45,23 @@ def test_jsonstore_query_returns_empty_on_no_match(tmp_path: Path):
     store = JsonStore(tmp_path / "index.json")
     store.add([Chunk(doc_path="a.md", kind="markdown", index=0, text="hello")])
     assert store.query("nothing", k=5) == []
+
+
+def test_rrf_fuse_ranks_shared_results_first():
+    a = Chunk(doc_path="a.md", kind="markdown", index=0, text="x")
+    b = Chunk(doc_path="b.md", kind="markdown", index=0, text="y")
+    c = Chunk(doc_path="c.md", kind="markdown", index=0, text="z")
+    # c appears in both rankings, so its fused score beats the two list leaders.
+    fused = rrf_fuse([[a, c], [b, c]], k=3)
+    assert (fused[0].doc_path, fused[0].index) == ("c.md", 0)
+    assert len(fused) == 3
+
+
+def test_rrf_fuse_dedupes_by_chunk_identity():
+    a = Chunk(doc_path="a.md", kind="markdown", index=0, text="x")
+    dup = Chunk(doc_path="a.md", kind="markdown", index=0, text="x")
+    fused = rrf_fuse([[a], [dup]], k=5)
+    assert len(fused) == 1
 
 
 def test_get_store_unknown_kind_raises(tmp_path: Path):

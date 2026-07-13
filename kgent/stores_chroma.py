@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .ingest import Chunk
-from .store import _MetaMixin
+from .store import Bm25Index, _MetaMixin, rrf_fuse
 
 # Chunks are sent to Chroma in slices of this size so a large repository does
 # not embed everything in one call and spike memory and CPU.
@@ -30,6 +30,9 @@ class ChromaStore(_MetaMixin):
         self.client = chromadb.PersistentClient(path=str(self.path.parent / "chroma_db"))
         self.collection = self.client.get_or_create_collection(name=self.COLLECTION)
         self._meta_path = self.path.parent / "meta.json"
+        # Lexical side of hybrid search, built lazily from the collection.
+        self._bm25 = Bm25Index()
+        self._bm25_dirty = True
 
     def add(
         self,
@@ -51,17 +54,32 @@ class ChromaStore(_MetaMixin):
             self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
             if on_progress is not None:
                 on_progress(min(start + ADD_BATCH_SIZE, total), total)
+        self._bm25_dirty = True
 
     def reset(self) -> None:
         existing = {c.name for c in self.client.list_collections()}
         if self.COLLECTION in existing:
             self.client.delete_collection(self.COLLECTION)
         self.collection = self.client.get_or_create_collection(name=self.COLLECTION)
+        self._bm25_dirty = True
 
     def query(self, text: str, k: int = 5) -> list[Chunk]:
+        """Hybrid search: semantic (embeddings) and lexical (BM25) fused by RRF.
+
+        Embeddings catch paraphrases and synonyms; BM25 nails exact identifiers
+        and rare terms. Fusing both is more robust than either alone.
+        """
         if self.collection.count() == 0:
             return []
-        result = self.collection.query(query_texts=[text], n_results=k)
+        pool = max(k * 4, 20)
+        semantic = self._semantic_query(text, pool)
+        lexical = self._lexical_query(text, pool)
+        if not lexical:
+            return semantic[:k]
+        return rrf_fuse([semantic, lexical], k)
+
+    def _semantic_query(self, text: str, n: int) -> list[Chunk]:
+        result = self.collection.query(query_texts=[text], n_results=n)
         documents = result.get("documents", [[]])[0]
         metadatas = result.get("metadatas", [[]])[0]
         chunks: list[Chunk] = []
@@ -75,6 +93,12 @@ class ChromaStore(_MetaMixin):
                 )
             )
         return chunks
+
+    def _lexical_query(self, text: str, n: int) -> list[Chunk]:
+        if self._bm25_dirty:
+            self._bm25.build(self.all_chunks())
+            self._bm25_dirty = False
+        return self._bm25.query(text, n)
 
     def count(self) -> int:
         return self.collection.count()
