@@ -89,12 +89,16 @@ export default function Sidebar({
   return (
     <aside className="hidden md:flex md:w-72 flex-col bg-bg-soft border-r border-border">
       <div className="p-3 border-b border-border space-y-2">
-        <div className="flex items-center gap-2.5 px-2 pt-1 pb-2">
+        <a
+          href="/"
+          title="Back to home"
+          className="flex items-center gap-2.5 px-2 pt-1 pb-2 hover:opacity-80 transition-opacity"
+        >
           <Logo className="w-7 h-7 text-accent" />
           <span className="font-mono text-lg font-semibold tracking-tight text-ink">
             kgent
           </span>
-        </div>
+        </a>
         <button
           onClick={onNewChat}
           className="w-full flex items-center gap-2 rounded-md border border-border bg-bg-card px-3 py-2 text-sm hover:bg-bg-card/80 transition-colors"

@@ -586,10 +586,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         page = WEB_DIR / "home.html"
         return _serve("home.html" if page.exists() else "index.html")
 
-    @app.get("/home")
-    def home_page() -> FileResponse:
-        return landing()
-
     @app.get("/app")
     def workspace() -> FileResponse:
         return _serve("index.html")

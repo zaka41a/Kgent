@@ -30,7 +30,7 @@ Point kgent at any folder. It extracts text from your files, indexes the chunks,
 * Streaming. Server Sent Events stream responses token by token.
 * Persistent chat. SQLite by default, Postgres in production.
 * Retrieval evaluation. `kgent eval` reports hit@k, MRR, recall and precision against a labelled JSONL dataset.
-* Web UI. React interface with light and dark mode, collapsible sidebar, provider switcher, settings modal, ingest flow, and a one click button to rebuild the entity graph.
+* Web UI. A constellation landing page at `/` and a chat workspace at `/app`: React interface with light and dark mode, collapsible sidebar, provider switcher, settings modal, ingest flow, a one click button to rebuild the entity graph, and a live knowledge map panel where an answer's citations light up as nodes on the graph.
 * CLI. Pipe friendly commands for ingest, query, chat, eval, graph build, and serve.
 
 ## Install
@@ -66,7 +66,7 @@ kgent ingest /path/to/your/repo
 ./stop.sh
 ```
 
-Open http://127.0.0.1:8088 to use the UI, or run `kgent chat` for the REPL.
+Open http://127.0.0.1:8088 for the landing page, go straight to the chat workspace at http://127.0.0.1:8088/app, or run `kgent chat` for the REPL.
 
 > `.env` is auto-loaded at startup via `python-dotenv`. Real environment variables still take precedence over `.env` values.
 
@@ -152,6 +152,8 @@ kgent graph clear                                # delete the cached graph
 ## HTTP API
 
 ```
+GET    /                         constellation landing page
+GET    /app                      chat workspace (React SPA)
 GET    /api/health
 GET    /api/store/info
 GET    /api/providers
@@ -159,6 +161,7 @@ POST   /api/ingest               { "path", "replace" }, starts a background job,
 GET    /api/ingest/status/{id}   ingestion progress for a running or finished job
 POST   /api/graph/build          { "mode", "provider", "model" }, starts a background graph build
 GET    /api/graph/status/{id}    graph build progress and result counts
+GET    /api/graph                { "nodes", "edges", "has_graph" } for the knowledge map
 POST   /api/ask                  { "question", "k", "provider", "model", "history", "conversation_id" }
 POST   /api/ask/stream           same body, returns SSE
 GET    /api/conversations
@@ -237,7 +240,7 @@ kgent/
 │   ├── settings.py       Pydantic environment configuration
 │   ├── logging_config.py logging setup
 │   ├── cli.py            click based CLI
-│   └── web/              built React assets (served at /)
+│   └── web/              built React assets + landing page (/, /app)
 ├── frontend/             React + Vite + Tailwind source
 ├── tests/                pytest suite
 ├── Dockerfile            production image (multi stage build)

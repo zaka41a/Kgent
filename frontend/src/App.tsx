@@ -73,6 +73,10 @@ function toChatMessages(detail: ConversationDetail): ChatMessage[] {
 // entities; the graph should read at a glance, not become a wall of labels.
 const CITED_LIMIT = 12;
 
+// The full graph can hold hundreds of nodes, which overlap into an unreadable
+// mess in a narrow panel. The map only ever draws a focused slice of this size.
+const MAP_NODE_LIMIT = 60;
+
 // Which graph nodes an answer actually leans on: score each node by how many of
 // the retrieved chunks mention its label (with a bonus when it appears in the
 // answer itself), then keep the strongest few.
@@ -442,6 +446,44 @@ export default function App() {
     return graph.nodes.filter((n) => set.has(n.id));
   }, [graph, citedNodes]);
 
+  // The slice of the graph the map actually draws: the cited nodes plus their
+  // direct neighbours when there is an answer, otherwise the most connected
+  // hubs. Keeping it small is what makes the constellation readable.
+  const visibleGraph = useMemo(() => {
+    if (!graph) return { nodes: [] as GraphNode[], edges: [] as GraphData["edges"] };
+    const cited = new Set(citedNodes);
+    let keep: Set<string>;
+    if (cited.size > 0) {
+      keep = new Set(cited);
+      for (const e of graph.edges) {
+        if (cited.has(e.src)) keep.add(e.dst);
+        if (cited.has(e.dst)) keep.add(e.src);
+      }
+    } else {
+      const deg = new Map<string, number>();
+      for (const e of graph.edges) {
+        deg.set(e.src, (deg.get(e.src) ?? 0) + 1);
+        deg.set(e.dst, (deg.get(e.dst) ?? 0) + 1);
+      }
+      keep = new Set(
+        [...graph.nodes]
+          .sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0))
+          .slice(0, MAP_NODE_LIMIT)
+          .map((n) => n.id),
+      );
+    }
+    if (keep.size > MAP_NODE_LIMIT) {
+      const ranked = [...keep].sort(
+        (a, b) => (cited.has(b) ? 1 : 0) - (cited.has(a) ? 1 : 0),
+      );
+      keep = new Set(ranked.slice(0, MAP_NODE_LIMIT));
+    }
+    return {
+      nodes: graph.nodes.filter((n) => keep.has(n.id)),
+      edges: graph.edges.filter((e) => keep.has(e.src) && keep.has(e.dst)),
+    };
+  }, [graph, citedNodes]);
+
   return (
     <div className="h-full flex bg-bg text-ink">
       {sidebarOpen && (
@@ -575,8 +617,8 @@ export default function App() {
 
           <div className="flex-1 relative min-h-0">
             <KnowledgeMap
-              nodes={graph.nodes}
-              edges={graph.edges}
+              nodes={visibleGraph.nodes}
+              edges={visibleGraph.edges}
               highlight={hoveredNode ? [hoveredNode] : citedNodes}
               className="absolute inset-0 w-full h-full"
             />
